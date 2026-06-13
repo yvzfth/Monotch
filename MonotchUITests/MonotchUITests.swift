@@ -1,13 +1,13 @@
 //
-//  NitcheUITests.swift
-//  NitcheUITests
+//  MonotchUITests.swift
+//  MonotchUITests
 //
 //  Created by Fatih Yavuz on 17.03.2026.
 //
 
 import XCTest
 
-final class NitcheUITests: XCTestCase {
+final class MonotchUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

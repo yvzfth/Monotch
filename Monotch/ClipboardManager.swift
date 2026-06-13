@@ -294,7 +294,7 @@ private extension ClipboardManager {
 
     var applicationSupportDirectory: URL {
         let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return baseURL.appendingPathComponent("Nitche", isDirectory: true)
+        return baseURL.appendingPathComponent("Monotch", isDirectory: true)
     }
 
     func loadHistory() {
@@ -402,7 +402,7 @@ private extension ClipboardManager {
             let data = try JSONEncoder().encode(history)
             try data.write(to: historyURL, options: .atomic)
         } catch {
-            NSLog("Nitche clipboard history save failed: \(error.localizedDescription)")
+            NSLog("Monotch clipboard history save failed: \(error.localizedDescription)")
         }
     }
 

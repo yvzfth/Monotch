@@ -1,13 +1,13 @@
 //
-//  NitcheUITestsLaunchTests.swift
-//  NitcheUITests
+//  MonotchUITestsLaunchTests.swift
+//  MonotchUITests
 //
 //  Created by Fatih Yavuz on 17.03.2026.
 //
 
 import XCTest
 
-final class NitcheUITestsLaunchTests: XCTestCase {
+final class MonotchUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

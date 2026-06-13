@@ -1,6 +1,6 @@
 //
-//  NitcheApp.swift
-//  Nitche
+//  MonotchApp.swift
+//  Monotch
 //
 //  Created by Fatih Yavuz on 17.03.2026.
 //
@@ -9,12 +9,12 @@ import SwiftUI
 import AppKit
 
 @main
-struct NitcheApp: App {
+struct MonotchApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @ObservedObject private var ui = NotchUIState.shared
 
     var body: some Scene {
-        MenuBarExtra("Nitche", systemImage: "rectangle.topthird.inset.filled") {
+        MenuBarExtra("Monotch", systemImage: "rectangle.topthird.inset.filled") {
             Button("Göster / Gizle") {
                 NotchWindowController.shared.toggle()
             }

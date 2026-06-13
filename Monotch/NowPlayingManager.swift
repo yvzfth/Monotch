@@ -1356,8 +1356,8 @@ private final class LRCLIBLyricsClient {
 
     private func dataTask(url: URL, timeout: TimeInterval, completion: @escaping (Data?) -> Void) {
         var request = URLRequest(url: url, timeoutInterval: timeout)
-        request.setValue("Nitche/1.0", forHTTPHeaderField: "User-Agent")
-        request.setValue("Nitche/1.0", forHTTPHeaderField: "Lrclib-Client")
+        request.setValue("Monotch/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("Monotch/1.0", forHTTPHeaderField: "Lrclib-Client")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         session.dataTask(with: request) { data, response, _ in
@@ -1717,7 +1717,7 @@ private enum PlayerApp: CaseIterable {
             tell application "Music"
                 if it is running then
                     try
-                        set artworkFile to "/private/tmp/nitche-current-artwork.jpg"
+                        set artworkFile to "/private/tmp/MONOTCH-current-artwork.jpg"
                         set rawArtwork to data of artwork 1 of current track
                         set fileReference to open for access POSIX file artworkFile with write permission
                         set eof of fileReference to 0

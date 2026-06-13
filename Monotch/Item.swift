@@ -1,6 +1,6 @@
 //
 //  Item.swift
-//  Nitche
+//  Monotch
 //
 //  Created by Fatih Yavuz on 17.03.2026.
 //

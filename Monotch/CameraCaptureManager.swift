@@ -40,7 +40,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
     private let movieOutput = AVCaptureMovieFileOutput()
     private let videoDataOutput = AVCaptureVideoDataOutput()
     private let ciContext = CIContext()
-    private let sessionQueue = DispatchQueue(label: "fatihyavuz.Nitche.camera-session")
+    private let sessionQueue = DispatchQueue(label: "fatihyavuz.Monotch.camera-session")
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private var currentVideoInput: AVCaptureDeviceInput?
     private var pendingPhotoFallbacksBySettingsID: [Int64: PendingPhotoFallback] = [:]
@@ -551,10 +551,10 @@ final class CameraCaptureManager: NSObject, ObservableObject {
         switch kind {
         case .photo:
             directory = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first!
-            filename = "Nitche Photo \(stamp).jpg"
+            filename = "Monotch Photo \(stamp).jpg"
         case .movie:
             directory = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first!
-            filename = "Nitche Recording \(stamp).mov"
+            filename = "Monotch Recording \(stamp).mov"
         }
 
         return directory.appendingPathComponent(filename)
@@ -562,7 +562,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
 
     private func makeRawRecordingURL() -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("Nitche Raw Recording \(UUID().uuidString).mov")
+            .appendingPathComponent("Monotch Raw Recording \(UUID().uuidString).mov")
     }
 
     private func copyRawRecording(_ sourceURL: URL, to destinationURL: URL, completion: @escaping (URL) -> Void) {
@@ -572,7 +572,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
             try? FileManager.default.removeItem(at: sourceURL)
             completion(destinationURL)
         } catch {
-            NSLog("Nitche video copy fallback failed: \(error.localizedDescription)")
+            NSLog("Monotch video copy fallback failed: \(error.localizedDescription)")
             completion(sourceURL)
         }
     }
@@ -659,7 +659,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
             frameRecordingAdaptor = adaptor
             frameRecordingOutputSize = outputSize
         } catch {
-            NSLog("Nitche frame recording setup failed: \(error.localizedDescription)")
+            NSLog("Monotch frame recording setup failed: \(error.localizedDescription)")
             finishFrameRecording()
         }
     }
@@ -742,9 +742,9 @@ final class CameraCaptureManager: NSObject, ObservableObject {
                 self?.addCapture(url: outputURL, kind: .movie)
             } else {
                 if let error = writer.error {
-                    NSLog("Nitche frame recording failed: \(error.localizedDescription)")
+                    NSLog("Monotch frame recording failed: \(error.localizedDescription)")
                 } else {
-                    NSLog("Nitche frame recording produced a blank video")
+                    NSLog("Monotch frame recording produced a blank video")
                 }
                 try? FileManager.default.removeItem(at: outputURL)
             }
@@ -778,14 +778,14 @@ final class CameraCaptureManager: NSObject, ObservableObject {
     @discardableResult
     private func captureLatestVideoFramePhoto(aspectRatio: CGFloat?) -> Bool {
         guard let pixelBuffer = latestVideoPixelBuffer else {
-            NSLog("Nitche photo fallback failed: no video frame available")
+            NSLog("Monotch photo fallback failed: no video frame available")
             return false
         }
 
         let image = CIImage(cvPixelBuffer: pixelBuffer)
         guard let cgImage = ciContext.createCGImage(image, from: image.extent),
               let jpegData = jpegPhotoData(from: cgImage, aspectRatio: aspectRatio) else {
-            NSLog("Nitche photo fallback failed: could not create image data")
+            NSLog("Monotch photo fallback failed: could not create image data")
             return false
         }
 
@@ -795,7 +795,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
             addCapture(url: url, kind: .photo)
             return true
         } catch {
-            NSLog("Nitche photo fallback failed: \(error.localizedDescription)")
+            NSLog("Monotch photo fallback failed: \(error.localizedDescription)")
             return false
         }
     }
@@ -954,7 +954,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
                 completion(destinationURL)
             } else {
                 if exporter.status == .completed {
-                    NSLog("Nitche video crop produced a blank frame; keeping raw recording instead")
+                    NSLog("Monotch video crop produced a blank frame; keeping raw recording instead")
                 }
                 try? FileManager.default.removeItem(at: destinationURL)
                 self.copyRawRecording(sourceURL, to: destinationURL, completion: completion)
@@ -1035,7 +1035,7 @@ private extension CameraCaptureManager {
 
     var applicationSupportDirectory: URL {
         let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return baseURL.appendingPathComponent("Nitche", isDirectory: true)
+        return baseURL.appendingPathComponent("Monotch", isDirectory: true)
     }
 
     func loadCaptures() {
@@ -1069,7 +1069,7 @@ private extension CameraCaptureManager {
             let data = try JSONEncoder().encode(storedCaptures)
             try data.write(to: capturesURL, options: .atomic)
         } catch {
-            NSLog("Nitche camera captures save failed: \(error.localizedDescription)")
+            NSLog("Monotch camera captures save failed: \(error.localizedDescription)")
         }
     }
 }
@@ -1085,13 +1085,13 @@ extension CameraCaptureManager: AVCapturePhotoCaptureDelegate {
         }
 
         if let error {
-            NSLog("Nitche photo capture failed: \(error.localizedDescription)")
+            NSLog("Monotch photo capture failed: \(error.localizedDescription)")
             _ = captureLatestVideoFramePhoto(aspectRatio: pending.aspectRatio)
             return
         }
 
         guard let data = photo.fileDataRepresentation() else {
-            NSLog("Nitche photo capture failed: no file data returned")
+            NSLog("Monotch photo capture failed: no file data returned")
             _ = captureLatestVideoFramePhoto(aspectRatio: pending.aspectRatio)
             return
         }
@@ -1101,7 +1101,7 @@ extension CameraCaptureManager: AVCapturePhotoCaptureDelegate {
             try croppedPhotoData(from: data, aspectRatio: pending.aspectRatio).write(to: url, options: .atomic)
             addCapture(url: url, kind: .photo)
         } catch {
-            NSLog("Nitche photo capture failed: \(error.localizedDescription)")
+            NSLog("Monotch photo capture failed: \(error.localizedDescription)")
             _ = captureLatestVideoFramePhoto(aspectRatio: pending.aspectRatio)
         }
     }
@@ -1141,7 +1141,7 @@ extension CameraCaptureManager: AVCaptureFileOutputRecordingDelegate {
             || (recordingError?.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool == true)
 
         if recordingFinishedSuccessfully == false, let error {
-            NSLog("Nitche video recording failed: \(error.localizedDescription)")
+            NSLog("Monotch video recording failed: \(error.localizedDescription)")
             try? FileManager.default.removeItem(at: outputFileURL)
         } else {
             let aspectRatio = recordingAspectRatiosByPath.removeValue(forKey: outputFileURL.path)

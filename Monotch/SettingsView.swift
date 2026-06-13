@@ -7,7 +7,7 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Nitche Settings")
+            Text("Monotch Settings")
                 .font(.headline)
 
             GroupBox("Widgets") {

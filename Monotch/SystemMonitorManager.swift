@@ -89,9 +89,9 @@ final class SystemMonitorManager: ObservableObject {
     private var previousCPUTicks: host_cpu_load_info = host_cpu_load_info()
     private var hasPreviousCPUTicks = false
     private let smc = AppleSMCController()
-    private let coreTelemetryQueue = DispatchQueue(label: "fatihyavuz.Nitche.core-telemetry", qos: .utility)
-    private let fanTelemetryQueue = DispatchQueue(label: "fatihyavuz.Nitche.fan-telemetry", qos: .utility)
-    private let storageScanQueue = DispatchQueue(label: "fatihyavuz.Nitche.storage-scan", qos: .utility)
+    private let coreTelemetryQueue = DispatchQueue(label: "fatihyavuz.Monotch.core-telemetry", qos: .utility)
+    private let fanTelemetryQueue = DispatchQueue(label: "fatihyavuz.Monotch.fan-telemetry", qos: .utility)
+    private let storageScanQueue = DispatchQueue(label: "fatihyavuz.Monotch.storage-scan", qos: .utility)
     private var lastStorageCategoryScan = Date.distantPast
     private var isReadingCoreTelemetry = false
     private var isReadingFanTelemetry = false
@@ -740,7 +740,7 @@ private extension SystemMonitorManager.FanMode {
 
 private enum BundledFanTool {
     static func setFanMode(_ mode: SystemMonitorManager.FanMode) -> Bool {
-        guard let helperURL = Bundle.main.url(forResource: "NitcheFanTool", withExtension: nil) else {
+        guard let helperURL = Bundle.main.url(forResource: "MonotchFanTool", withExtension: nil) else {
             return false
         }
 
@@ -773,10 +773,10 @@ private enum FanDaemonCommandResult: Equatable {
 }
 
 private enum PrivilegedFanDaemon {
-    private static let currentPlistName = "fatihyavuz.Nitche.FanDaemon.v4.plist"
-    private static let currentSocketPath = "/var/run/fatihyavuz.Nitche.FanDaemon.v4.sock"
-    private static let legacyPlistName = "fatihyavuz.Nitche.FanDaemon.v2.plist"
-    private static let legacySocketPath = "/var/run/fatihyavuz.Nitche.FanDaemon.v2.sock"
+    private static let currentPlistName = "fatihyavuz.Monotch.FanDaemon.v4.plist"
+    private static let currentSocketPath = "/var/run/fatihyavuz.Monotch.FanDaemon.v4.sock"
+    private static let legacyPlistName = "fatihyavuz.Monotch.FanDaemon.v2.plist"
+    private static let legacySocketPath = "/var/run/fatihyavuz.Monotch.FanDaemon.v2.sock"
 
     static var isEnabled: Bool {
         guard #available(macOS 13.0, *) else { return false }

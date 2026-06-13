@@ -12,37 +12,37 @@
 			containerPortal = 3D9C5D112F68A95400D34C9D /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 3D9C5D182F68A95400D34C9D;
-			remoteInfo = Nitche;
+			remoteInfo = Monotch;
 		};
 		3D9C5D332F68A95600D34C9D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 3D9C5D112F68A95400D34C9D /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 3D9C5D182F68A95400D34C9D;
-			remoteInfo = Nitche;
+			remoteInfo = Monotch;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		3D9C5D192F68A95400D34C9D /* Nitche.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Nitche.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		3D9C5D282F68A95600D34C9D /* NitcheTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NitcheTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		3D9C5D322F68A95600D34C9D /* NitcheUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NitcheUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D9C5D192F68A95400D34C9D /* Monotch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Monotch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D9C5D282F68A95600D34C9D /* MonotchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MonotchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D9C5D322F68A95600D34C9D /* MonotchUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MonotchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		3D9C5D1B2F68A95400D34C9D /* Nitche */ = {
+		3D9C5D1B2F68A95400D34C9D /* Monotch */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Nitche;
+			path = Monotch;
 			sourceTree = "<group>";
 		};
-		3D9C5D2B2F68A95600D34C9D /* NitcheTests */ = {
+		3D9C5D2B2F68A95600D34C9D /* MonotchTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = NitcheTests;
+			path = MonotchTests;
 			sourceTree = "<group>";
 		};
-		3D9C5D352F68A95600D34C9D /* NitcheUITests */ = {
+		3D9C5D352F68A95600D34C9D /* MonotchUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = NitcheUITests;
+			path = MonotchUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -75,9 +75,9 @@
 		3D9C5D102F68A95400D34C9D = {
 			isa = PBXGroup;
 			children = (
-				3D9C5D1B2F68A95400D34C9D /* Nitche */,
-				3D9C5D2B2F68A95600D34C9D /* NitcheTests */,
-				3D9C5D352F68A95600D34C9D /* NitcheUITests */,
+				3D9C5D1B2F68A95400D34C9D /* Monotch */,
+				3D9C5D2B2F68A95600D34C9D /* MonotchTests */,
+				3D9C5D352F68A95600D34C9D /* MonotchUITests */,
 				3D9C5D1A2F68A95400D34C9D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -85,9 +85,9 @@
 		3D9C5D1A2F68A95400D34C9D /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				3D9C5D192F68A95400D34C9D /* Nitche.app */,
-				3D9C5D282F68A95600D34C9D /* NitcheTests.xctest */,
-				3D9C5D322F68A95600D34C9D /* NitcheUITests.xctest */,
+				3D9C5D192F68A95400D34C9D /* Monotch.app */,
+				3D9C5D282F68A95600D34C9D /* MonotchTests.xctest */,
+				3D9C5D322F68A95600D34C9D /* MonotchUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,9 +95,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		3D9C5D182F68A95400D34C9D /* Nitche */ = {
+		3D9C5D182F68A95400D34C9D /* Monotch */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3D9C5D3C2F68A95600D34C9D /* Build configuration list for PBXNativeTarget "Nitche" */;
+			buildConfigurationList = 3D9C5D3C2F68A95600D34C9D /* Build configuration list for PBXNativeTarget "Monotch" */;
 			buildPhases = (
 				3D9C5D152F68A95400D34C9D /* Sources */,
 				3D9C5D162F68A95400D34C9D /* Frameworks */,
@@ -109,18 +109,18 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				3D9C5D1B2F68A95400D34C9D /* Nitche */,
+				3D9C5D1B2F68A95400D34C9D /* Monotch */,
 			);
-			name = Nitche;
+			name = Monotch;
 			packageProductDependencies = (
 			);
-			productName = Nitche;
-			productReference = 3D9C5D192F68A95400D34C9D /* Nitche.app */;
+			productName = Monotch;
+			productReference = 3D9C5D192F68A95400D34C9D /* Monotch.app */;
 			productType = "com.apple.product-type.application";
 		};
-		3D9C5D272F68A95600D34C9D /* NitcheTests */ = {
+		3D9C5D272F68A95600D34C9D /* MonotchTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3D9C5D3F2F68A95600D34C9D /* Build configuration list for PBXNativeTarget "NitcheTests" */;
+			buildConfigurationList = 3D9C5D3F2F68A95600D34C9D /* Build configuration list for PBXNativeTarget "MonotchTests" */;
 			buildPhases = (
 				3D9C5D242F68A95600D34C9D /* Sources */,
 				3D9C5D252F68A95600D34C9D /* Frameworks */,
@@ -132,18 +132,18 @@
 				3D9C5D2A2F68A95600D34C9D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				3D9C5D2B2F68A95600D34C9D /* NitcheTests */,
+				3D9C5D2B2F68A95600D34C9D /* MonotchTests */,
 			);
-			name = NitcheTests;
+			name = MonotchTests;
 			packageProductDependencies = (
 			);
-			productName = NitcheTests;
-			productReference = 3D9C5D282F68A95600D34C9D /* NitcheTests.xctest */;
+			productName = MonotchTests;
+			productReference = 3D9C5D282F68A95600D34C9D /* MonotchTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		3D9C5D312F68A95600D34C9D /* NitcheUITests */ = {
+		3D9C5D312F68A95600D34C9D /* MonotchUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3D9C5D422F68A95600D34C9D /* Build configuration list for PBXNativeTarget "NitcheUITests" */;
+			buildConfigurationList = 3D9C5D422F68A95600D34C9D /* Build configuration list for PBXNativeTarget "MonotchUITests" */;
 			buildPhases = (
 				3D9C5D2E2F68A95600D34C9D /* Sources */,
 				3D9C5D2F2F68A95600D34C9D /* Frameworks */,
@@ -155,13 +155,13 @@
 				3D9C5D342F68A95600D34C9D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				3D9C5D352F68A95600D34C9D /* NitcheUITests */,
+				3D9C5D352F68A95600D34C9D /* MonotchUITests */,
 			);
-			name = NitcheUITests;
+			name = MonotchUITests;
 			packageProductDependencies = (
 			);
-			productName = NitcheUITests;
-			productReference = 3D9C5D322F68A95600D34C9D /* NitcheUITests.xctest */;
+			productName = MonotchUITests;
+			productReference = 3D9C5D322F68A95600D34C9D /* MonotchUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -187,7 +187,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 3D9C5D142F68A95400D34C9D /* Build configuration list for PBXProject "Nitche" */;
+			buildConfigurationList = 3D9C5D142F68A95400D34C9D /* Build configuration list for PBXProject "Monotch" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -201,9 +201,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				3D9C5D182F68A95400D34C9D /* Nitche */,
-				3D9C5D272F68A95600D34C9D /* NitcheTests */,
-				3D9C5D312F68A95600D34C9D /* NitcheUITests */,
+				3D9C5D182F68A95400D34C9D /* Monotch */,
+				3D9C5D272F68A95600D34C9D /* MonotchTests */,
+				3D9C5D312F68A95600D34C9D /* MonotchUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -242,20 +242,20 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/Tools/NitcheFanTool/main.c",
-				"$(SRCROOT)/Tools/NitcheFanTool/fatihyavuz.Nitche.FanDaemon.v4.plist",
+				"$(SRCROOT)/Tools/MonotchFanTool/main.c",
+				"$(SRCROOT)/Tools/MonotchFanTool/fatihyavuz.Monotch.FanDaemon.v4.plist",
 			);
 			name = "Build Fan Helper";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/NitcheFanTool",
-				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchServices/NitcheFanDaemon",
-				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/fatihyavuz.Nitche.FanDaemon.v4.plist",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/MonotchFanTool",
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchServices/MonotchFanDaemon",
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/fatihyavuz.Monotch.FanDaemon.v4.plist",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nHELPER_OUT=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/NitcheFanTool\"\nDAEMON_OUT=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchServices/NitcheFanDaemon\"\nDAEMON_PLIST_OUT=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/fatihyavuz.Nitche.FanDaemon.v4.plist\"\nmkdir -p \"$(dirname \"$HELPER_OUT\")\" \"$(dirname \"$DAEMON_OUT\")\" \"$(dirname \"$DAEMON_PLIST_OUT\")\"\nxcrun clang \"${SRCROOT}/Tools/NitcheFanTool/main.c\" -framework IOKit -framework CoreFoundation -o \"$HELPER_OUT\"\ncp \"$HELPER_OUT\" \"$DAEMON_OUT\"\ncp \"${SRCROOT}/Tools/NitcheFanTool/fatihyavuz.Nitche.FanDaemon.v4.plist\" \"$DAEMON_PLIST_OUT\"\nif [ \"${CODE_SIGNING_ALLOWED:-NO}\" = \"YES\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none \"$HELPER_OUT\"\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none \"$DAEMON_OUT\"\nfi\n";
+			shellScript = "set -e\nHELPER_OUT=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/MonotchFanTool\"\nDAEMON_OUT=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchServices/MonotchFanDaemon\"\nDAEMON_PLIST_OUT=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/fatihyavuz.Monotch.FanDaemon.v4.plist\"\nmkdir -p \"$(dirname \"$HELPER_OUT\")\" \"$(dirname \"$DAEMON_OUT\")\" \"$(dirname \"$DAEMON_PLIST_OUT\")\"\nxcrun clang \"${SRCROOT}/Tools/MonotchFanTool/main.c\" -framework IOKit -framework CoreFoundation -o \"$HELPER_OUT\"\ncp \"$HELPER_OUT\" \"$DAEMON_OUT\"\ncp \"${SRCROOT}/Tools/MonotchFanTool/fatihyavuz.Monotch.FanDaemon.v4.plist\" \"$DAEMON_PLIST_OUT\"\nif [ \"${CODE_SIGNING_ALLOWED:-NO}\" = \"YES\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none \"$HELPER_OUT\"\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none \"$DAEMON_OUT\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -286,12 +286,12 @@
 /* Begin PBXTargetDependency section */
 		3D9C5D2A2F68A95600D34C9D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 3D9C5D182F68A95400D34C9D /* Nitche */;
+			target = 3D9C5D182F68A95400D34C9D /* Monotch */;
 			targetProxy = 3D9C5D292F68A95600D34C9D /* PBXContainerItemProxy */;
 		};
 		3D9C5D342F68A95600D34C9D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 3D9C5D182F68A95400D34C9D /* Nitche */;
+			target = 3D9C5D182F68A95400D34C9D /* Monotch */;
 			targetProxy = 3D9C5D332F68A95600D34C9D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -426,7 +426,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Nitche/Nitche.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Monotch/Monotch.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -437,9 +439,9 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSAccessibilityUsageDescription = "Nitche needs Accessibility access to read Spotify queue items and press Spotify controls inside the notch.";
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Nitche needs permission to control Music and Spotify playback from the notch.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Nitche needs camera access to show the camera preview inside the notch.";
+				INFOPLIST_KEY_NSAccessibilityUsageDescription = "Monotch needs Accessibility access to read Spotify queue items and press Spotify controls inside the notch.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Monotch needs permission to control Music and Spotify playback from the notch.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Monotch needs camera access to show the camera preview inside the notch.";
 				INFOPLIST_KEY_NSCameraUseContinuityCameraDeviceType = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -447,8 +449,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.Nitche;
+				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.Monotch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -464,7 +467,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Nitche/Nitche.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Monotch/Monotch.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -475,9 +480,9 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSAccessibilityUsageDescription = "Nitche needs Accessibility access to read Spotify queue items and press Spotify controls inside the notch.";
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Nitche needs permission to control Music and Spotify playback from the notch.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Nitche needs camera access to show the camera preview inside the notch.";
+				INFOPLIST_KEY_NSAccessibilityUsageDescription = "Monotch needs Accessibility access to read Spotify queue items and press Spotify controls inside the notch.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Monotch needs permission to control Music and Spotify playback from the notch.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Monotch needs camera access to show the camera preview inside the notch.";
 				INFOPLIST_KEY_NSCameraUseContinuityCameraDeviceType = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -485,8 +490,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.Nitche;
+				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.Monotch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -508,14 +514,14 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.NitcheTests;
+				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.MonotchTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Nitche.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Nitche";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Monotch.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Monotch";
 			};
 			name = Debug;
 		};
@@ -530,14 +536,14 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.NitcheTests;
+				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.MonotchTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Nitche.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Nitche";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Monotch.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Monotch";
 			};
 			name = Release;
 		};
@@ -550,14 +556,14 @@
 				DEVELOPMENT_TEAM = UL9SFF5S2Z;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.NitcheUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.MonotchUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Nitche;
+				TEST_TARGET_NAME = Monotch;
 			};
 			name = Debug;
 		};
@@ -570,21 +576,21 @@
 				DEVELOPMENT_TEAM = UL9SFF5S2Z;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.NitcheUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = fatihyavuz.MonotchUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Nitche;
+				TEST_TARGET_NAME = Monotch;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		3D9C5D142F68A95400D34C9D /* Build configuration list for PBXProject "Nitche" */ = {
+		3D9C5D142F68A95400D34C9D /* Build configuration list for PBXProject "Monotch" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				3D9C5D3A2F68A95600D34C9D /* Debug */,
@@ -593,7 +599,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		3D9C5D3C2F68A95600D34C9D /* Build configuration list for PBXNativeTarget "Nitche" */ = {
+		3D9C5D3C2F68A95600D34C9D /* Build configuration list for PBXNativeTarget "Monotch" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				3D9C5D3D2F68A95600D34C9D /* Debug */,
@@ -602,7 +608,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		3D9C5D3F2F68A95600D34C9D /* Build configuration list for PBXNativeTarget "NitcheTests" */ = {
+		3D9C5D3F2F68A95600D34C9D /* Build configuration list for PBXNativeTarget "MonotchTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				3D9C5D402F68A95600D34C9D /* Debug */,
@@ -611,7 +617,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		3D9C5D422F68A95600D34C9D /* Build configuration list for PBXNativeTarget "NitcheUITests" */ = {
+		3D9C5D422F68A95600D34C9D /* Build configuration list for PBXNativeTarget "MonotchUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				3D9C5D432F68A95600D34C9D /* Debug */,
