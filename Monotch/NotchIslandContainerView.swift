@@ -116,8 +116,6 @@ struct NotchIslandContainerView: View {
     @State private var tabScrollGestureConsumed = false
     @State private var tabScrollGestureToken = 0
     @State private var tabTransitionDirection = 1
-    @State private var tabSwitchToken = 0
-    @State private var isSequencingTabSwitch = false
     @State private var isKeyboardTabSwitchLocked = false
     @State private var mediaScrollAccumulatedDelta: CGFloat = 0
     @State private var mediaScrollGestureConsumed = false
@@ -212,9 +210,7 @@ struct NotchIslandContainerView: View {
                 refreshOutputVolumeLevel()
             }
             updateVisiblePageWork()
-            if isSequencingTabSwitch == false {
-                syncExpandedHeight()
-            }
+            syncExpandedHeight()
         }
         .onChange(of: ui.isExpanded) { _, _ in
             updateVisiblePageWork()
@@ -333,12 +329,21 @@ struct NotchIslandContainerView: View {
             Color.clear
                 .frame(height: currentPage?.topInset ?? 52)
             if let page = currentPage {
-                pageView(page)
-                    .id(page)
-                    .transition(pageTransition)
-                    .animation(.snappy(duration: 0.24, extraBounce: 0.03), value: normalizedIndex)
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, page.bottomInset)
+                ZStack {
+                    pageView(page)
+
+                    if pageNeedsLoadingOverlay(page) {
+                        pageLoadingOverlay(page)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    }
+                }
+                .frame(height: contentHeight(for: page), alignment: .top)
+                .id(page)
+                .transition(pageTransition)
+                .animation(.snappy(duration: 0.14, extraBounce: 0.01), value: normalizedIndex)
+                .animation(.easeOut(duration: 0.16), value: pageNeedsLoadingOverlay(page))
+                .padding(.horizontal, 18)
+                .padding(.bottom, page.bottomInset)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -369,6 +374,63 @@ struct NotchIslandContainerView: View {
         }
 
         return max(0, expandedHeight(for: page) - page.topInset - page.bottomInset)
+    }
+
+    private func pageNeedsLoadingOverlay(_ page: WidgetPage) -> Bool {
+        switch page {
+        case .system:
+            return systemSnapshotIsReady == false
+        case .camera:
+            return isCameraPreviewWarm == false
+        case .multimedia, .clipboard:
+            return false
+        }
+    }
+
+    private var systemSnapshotIsReady: Bool {
+        system.memoryUsed > 0
+            || system.diskTotal > 0
+            || system.threadCount > 0
+            || system.processCount > 0
+            || system.fanAvailable
+            || system.temperatureReadings.isEmpty == false
+    }
+
+    private func pageLoadingOverlay(_ page: WidgetPage) -> some View {
+        VStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.72)
+
+            Text(pageLoadingText(for: page))
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.50))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color.black.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.30), radius: 10, y: 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .allowsHitTesting(false)
+    }
+
+    private func pageLoadingText(for page: WidgetPage) -> String {
+        switch page {
+        case .system:
+            return "Loading system data"
+        case .camera:
+            return "Warming camera"
+        case .multimedia:
+            return "Loading media"
+        case .clipboard:
+            return "Loading clipboard"
+        }
     }
 
     private var cameraPreviewSize: CGSize {
@@ -429,43 +491,15 @@ struct NotchIslandContainerView: View {
         guard let targetPage = page(forRawIndex: rawIndex) else { return }
         let count = activePages.count
         let targetNormalizedIndex = (rawIndex % count + count) % count
-        let currentHeight = ui.expandedHeight
         let targetHeight = expandedHeight(for: targetPage)
 
-        guard targetNormalizedIndex != normalizedIndex || targetHeight != currentHeight else { return }
+        guard targetNormalizedIndex != normalizedIndex || targetHeight != ui.expandedHeight else { return }
 
-        tabSwitchToken += 1
-        let token = tabSwitchToken
-        isSequencingTabSwitch = true
         tabTransitionDirection = direction
 
-        let switchContent = {
-            guard tabSwitchToken == token else { return }
-
-            withAnimation(.snappy(duration: 0.22, extraBounce: 0.02)) {
-                currentPageIndex = rawIndex
-            }
-
-            let resizeDelay = targetHeight < currentHeight ? 0.23 : 0.0
-            DispatchQueue.main.asyncAfter(deadline: .now() + resizeDelay) {
-                guard tabSwitchToken == token else { return }
-                ui.expandedHeight = targetHeight
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                    guard tabSwitchToken == token else { return }
-                    isSequencingTabSwitch = false
-                    syncExpandedHeight()
-                }
-            }
-        }
-
-        if targetHeight > currentHeight {
+        withAnimation(.snappy(duration: 0.14, extraBounce: 0.01)) {
+            currentPageIndex = rawIndex
             ui.expandedHeight = targetHeight
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
-                switchContent()
-            }
-        } else {
-            switchContent()
         }
     }
 
@@ -593,7 +627,7 @@ struct NotchIslandContainerView: View {
         let token = tabScrollGestureToken
         tabScrollAccumulatedDelta += deltaX
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             guard tabScrollGestureToken == token else { return }
             tabScrollAccumulatedDelta = 0
             tabScrollGestureConsumed = false
@@ -2713,7 +2747,7 @@ struct NotchIslandContainerView: View {
         isKeyboardTabSwitchLocked = true
         switchToPageIndex(currentPageIndex + direction, direction: direction)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.46) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             isKeyboardTabSwitchLocked = false
         }
     }
