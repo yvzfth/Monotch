@@ -2322,8 +2322,8 @@ struct NotchIslandContainerView: View {
             Circle()
                 .fill(Color.white.opacity(isPressed ? 0.98 : 0.92))
                 .frame(
-                    width: ringSize * (isPressed ? 0.58 : 0.48),
-                    height: ringSize * (isPressed ? 0.58 : 0.48)
+                    width: ringSize * (isPressed ? 0.70 : 0.62),
+                    height: ringSize * (isPressed ? 0.70 : 0.62)
                 )
         }
         .frame(width: cameraCaptureButtonSize, height: cameraCaptureButtonSize)
