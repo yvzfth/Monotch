@@ -93,7 +93,7 @@ struct NotchIslandContainerView: View {
     @State private var cameraRecordPressActive = false
     @State private var cameraRecordPressStartedRecording = false
     @State private var hoveredCameraCaptureID: UUID?
-    @State private var isCameraPreviewWarm = false
+    @State private var isCameraPreviewWarm = true
     @State private var cameraPreviewWarmToken = 0
     @State private var copiedTextItemID: UUID?
     @State private var copiedImageItemID: UUID?
@@ -302,22 +302,13 @@ struct NotchIslandContainerView: View {
     }
 
     private func prepareCameraPreviewWarmup() {
-        guard isCameraPreviewWarm == false else { return }
-
         cameraPreviewWarmToken += 1
-        let token = cameraPreviewWarmToken
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-            guard currentPage == .camera, ui.isExpanded, cameraPreviewWarmToken == token else { return }
-            withAnimation(.easeOut(duration: 0.16)) {
-                isCameraPreviewWarm = true
-            }
-        }
+        isCameraPreviewWarm = true
     }
 
     private func resetCameraPreviewWarmup() {
         cameraPreviewWarmToken += 1
-        isCameraPreviewWarm = false
+        isCameraPreviewWarm = true
     }
 
     private var notchShape: BottomRoundedRectangle {
@@ -381,7 +372,7 @@ struct NotchIslandContainerView: View {
         case .system:
             return systemSnapshotIsReady == false
         case .camera:
-            return isCameraPreviewWarm == false
+            return false
         case .multimedia, .clipboard:
             return false
         }
@@ -1889,11 +1880,6 @@ struct NotchIslandContainerView: View {
             .scaleEffect(x: -1, y: 1, anchor: .center)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(cameraPreviewEffects(cornerRadius: cornerRadius))
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.black)
-                    .opacity(isCameraPreviewWarm ? 0 : 1)
-            }
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
@@ -2101,13 +2087,9 @@ struct NotchIslandContainerView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.white.opacity(0.10))
 
-            if item.kind == .photo, let image = NSImage(contentsOf: item.url) {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 34, height: 34)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
+            CameraCaptureThumbnail(item: item)
+                .frame(width: 34, height: 34)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             if isCopied {
                 copyBlinkIcon
@@ -2286,8 +2268,8 @@ struct NotchIslandContainerView: View {
             Circle()
                 .fill(Color.white.opacity(isPressed ? 0.98 : 0.92))
                 .frame(
-                    width: ringSize * (isPressed ? 0.48 : 0.36),
-                    height: ringSize * (isPressed ? 0.48 : 0.36)
+                    width: ringSize * (isPressed ? 0.58 : 0.48),
+                    height: ringSize * (isPressed ? 0.58 : 0.48)
                 )
         }
         .frame(width: cameraCaptureButtonSize, height: cameraCaptureButtonSize)
@@ -3353,6 +3335,113 @@ private extension View {
 
     func memoryDetailPanelStyle() -> some View {
         self.systemDetailPanelStyle()
+    }
+}
+
+private struct CameraCaptureThumbnail: View {
+    let item: CameraCaptureItem
+
+    @State private var image: NSImage?
+
+    private static let cache: NSCache<NSURL, NSImage> = {
+        let cache = NSCache<NSURL, NSImage>()
+        cache.totalCostLimit = 32 * 1024 * 1024
+        return cache
+    }()
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: item.kind == .photo ? "photo" : "play.rectangle")
+                    .font(.system(size: item.kind == .photo ? 15 : 14, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.46))
+            }
+        }
+        .clipped()
+        .task(id: item.url) {
+            let key = item.url.standardizedFileURL as NSURL
+            if let cachedImage = Self.cache.object(forKey: key) {
+                image = cachedImage
+                return
+            }
+
+            guard let loadedImage = loadThumbnail(for: item) else { return }
+            Self.cache.setObject(loadedImage, forKey: key, cost: 120 * 120 * 4)
+            image = loadedImage
+        }
+    }
+
+    private func loadThumbnail(for item: CameraCaptureItem) -> NSImage? {
+        switch item.kind {
+        case .photo:
+            return NSImage(contentsOf: item.url)
+        case .movie:
+            let asset = AVAsset(url: item.url)
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 160, height: 160)
+            generator.requestedTimeToleranceBefore = .zero
+            generator.requestedTimeToleranceAfter = CMTime(seconds: 0.45, preferredTimescale: 600)
+
+            let times = [
+                CMTime(seconds: 0.28, preferredTimescale: 600),
+                CMTime(seconds: 0.65, preferredTimescale: 600),
+                CMTime(seconds: 1.0, preferredTimescale: 600),
+                CMTime(seconds: 0.0, preferredTimescale: 600)
+            ]
+            var fallbackImage: NSImage?
+
+            for time in times {
+                guard let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) else { continue }
+                let image = NSImage(cgImage: cgImage, size: .zero)
+                if thumbnailImageHasVisiblePixels(cgImage) {
+                    return image
+                }
+                fallbackImage = fallbackImage ?? image
+            }
+
+            return fallbackImage
+        }
+    }
+
+    private func thumbnailImageHasVisiblePixels(_ image: CGImage) -> Bool {
+        let width = 16
+        let height = 16
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: width * height * bytesPerPixel)
+
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return true
+        }
+
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        var totalLuma = 0
+        var maxLuma = 0
+        for index in stride(from: 0, to: pixels.count, by: bytesPerPixel) {
+            let red = Int(pixels[index])
+            let green = Int(pixels[index + 1])
+            let blue = Int(pixels[index + 2])
+            let luma = (red * 299 + green * 587 + blue * 114) / 1000
+            totalLuma += luma
+            maxLuma = max(maxLuma, luma)
+        }
+
+        let averageLuma = totalLuma / (width * height)
+        return averageLuma > 4 || maxLuma > 18
     }
 }
 

@@ -51,6 +51,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
     private var frameRecordingURL: URL?
     private var frameRecordingAspectRatio: CGFloat?
     private var frameRecordingOutputSize: CGSize = .zero
+    private var frameRecordingHasVisibleStartFrame = false
     private var latestVideoPixelBuffer: CVPixelBuffer?
     private var previewWarmupToken = 0
     private var didConfigureSession = false
@@ -195,7 +196,6 @@ final class CameraCaptureManager: NSObject, ObservableObject {
                 return
             }
 
-            self.syncToSystemPreferredCameraIfNeeded()
             self.prepareSessionForRecording()
 
             self.frameRecordingURL = self.makeCaptureURL(kind: .movie)
@@ -204,6 +204,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
             self.frameRecordingInput = nil
             self.frameRecordingAdaptor = nil
             self.frameRecordingOutputSize = .zero
+            self.frameRecordingHasVisibleStartFrame = false
             DispatchQueue.main.async {
                 self.isRecording = true
             }
@@ -271,24 +272,17 @@ final class CameraCaptureManager: NSObject, ObservableObject {
         previewWarmupToken += 1
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        previewLayer.opacity = 0
+        previewLayer.opacity = 1
         CATransaction.commit()
     }
 
     private func revealPreviewLayerAfterWarmup() {
-        let token = previewWarmupToken
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.95) { [weak self] in
-            guard let self,
-                  self.previewWarmupToken == token,
-                  let previewLayer = self.previewLayer else {
-                return
-            }
+        guard let previewLayer else { return }
 
-            CATransaction.begin()
-            CATransaction.setAnimationDuration(0.18)
-            previewLayer.opacity = 1
-            CATransaction.commit()
-        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        previewLayer.opacity = 1
+        CATransaction.commit()
     }
 
     private func configureSession() {
@@ -433,25 +427,19 @@ final class CameraCaptureManager: NSObject, ObservableObject {
     }
 
     private func prepareSessionForRecording() {
+        guard session.outputs.contains(videoDataOutput) == false else { return }
+
         session.beginConfiguration()
-        applyRecordingSessionPreset()
         setVideoFrameCaptureEnabled(true, wrapInConfiguration: false)
         session.commitConfiguration()
     }
 
     private func restoreSessionAfterRecording() {
+        guard session.outputs.contains(videoDataOutput) == false else { return }
+
         session.beginConfiguration()
-        applyBestSessionPreset()
         setVideoFrameCaptureEnabled(true, wrapInConfiguration: false)
         session.commitConfiguration()
-    }
-
-    private func applyRecordingSessionPreset() {
-        let presets: [AVCaptureSession.Preset] = [.high, .medium]
-        for preset in presets where session.canSetSessionPreset(preset) {
-            session.sessionPreset = preset
-            return
-        }
     }
 
     private func applyBestSessionPreset() {
@@ -585,6 +573,11 @@ final class CameraCaptureManager: NSObject, ObservableObject {
 
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         guard presentationTime.isValid else { return }
+
+        if frameRecordingHasVisibleStartFrame == false {
+            guard pixelBufferHasVisiblePixels(pixelBuffer) else { return }
+            frameRecordingHasVisibleStartFrame = true
+        }
 
         if frameRecordingWriter == nil {
             configureFrameRecordingWriter(
@@ -722,6 +715,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
         frameRecordingURL = nil
         frameRecordingAspectRatio = nil
         frameRecordingOutputSize = .zero
+        frameRecordingHasVisibleStartFrame = false
 
         DispatchQueue.main.async {
             self.isRecording = false
@@ -962,6 +956,45 @@ final class CameraCaptureManager: NSObject, ObservableObject {
         }
     }
 
+    private func pixelBufferHasVisiblePixels(_ pixelBuffer: CVPixelBuffer) -> Bool {
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+
+        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return true }
+
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        guard width > 0, height > 0, bytesPerRow > 0 else { return false }
+
+        let sampleColumns = min(18, width)
+        let sampleRows = min(18, height)
+        var totalLuma = 0
+        var maxLuma = 0
+        var samples = 0
+
+        for rowIndex in 0..<sampleRows {
+            let y = min(height - 1, rowIndex * height / sampleRows)
+            let row = baseAddress.advanced(by: y * bytesPerRow).assumingMemoryBound(to: UInt8.self)
+
+            for columnIndex in 0..<sampleColumns {
+                let x = min(width - 1, columnIndex * width / sampleColumns)
+                let pixelIndex = x * 4
+                let blue = Int(row[pixelIndex])
+                let green = Int(row[pixelIndex + 1])
+                let red = Int(row[pixelIndex + 2])
+                let luma = (red * 299 + green * 587 + blue * 114) / 1000
+                totalLuma += luma
+                maxLuma = max(maxLuma, luma)
+                samples += 1
+            }
+        }
+
+        guard samples > 0 else { return false }
+        let averageLuma = totalLuma / samples
+        return averageLuma > 4 || maxLuma > 18
+    }
+
     private func videoLikelyContainsVisibleFrame(_ url: URL) -> Bool {
         let asset = AVAsset(url: url)
         let generator = AVAssetImageGenerator(asset: asset)
@@ -972,7 +1005,8 @@ final class CameraCaptureManager: NSObject, ObservableObject {
 
         let sampleTimes = [
             CMTime(seconds: 0.08, preferredTimescale: 600),
-            CMTime(seconds: 0.35, preferredTimescale: 600)
+            CMTime(seconds: 0.35, preferredTimescale: 600),
+            CMTime(seconds: 0.8, preferredTimescale: 600)
         ]
 
         for sampleTime in sampleTimes {
