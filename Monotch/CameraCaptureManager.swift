@@ -31,6 +31,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
     static let shared = CameraCaptureManager()
 
     @Published var isRecording = false
+    @Published private(set) var isPreviewReady = false
     @Published var captures: [CameraCaptureItem] = [] {
         didSet { saveCapturesIfNeeded() }
     }
@@ -53,6 +54,8 @@ final class CameraCaptureManager: NSObject, ObservableObject {
     private var frameRecordingOutputSize: CGSize = .zero
     private var frameRecordingHasVisibleStartFrame = false
     private var latestVideoPixelBuffer: CVPixelBuffer?
+    private var previewHasVisibleFrame = false
+    private var previewVisibleFrameCount = 0
     private var previewWarmupToken = 0
     private var didConfigureSession = false
     private var permissionDenied = false
@@ -102,7 +105,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
                     if granted {
                         self?.configureAndStart()
                     } else {
-                        self?.previewWarmupToken += 1
+                        self?.markPreviewUnavailable()
                         self?.previewLayer?.removeFromSuperlayer()
                         self?.previewLayer = nil
                     }
@@ -110,7 +113,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
             }
         default:
             permissionDenied = true
-            previewWarmupToken += 1
+            markPreviewUnavailable()
             previewLayer?.removeFromSuperlayer()
             previewLayer = nil
         }
@@ -125,7 +128,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
     }
 
     func detachPreview(shouldStopSession: Bool) {
-        previewWarmupToken += 1
+        markPreviewUnavailable()
         previewLayer?.removeFromSuperlayer()
         previewLayer = nil
 
@@ -263,26 +266,42 @@ final class CameraCaptureManager: NSObject, ObservableObject {
             if self.session.isRunning == false {
                 self.session.startRunning()
             }
-
-            self.revealPreviewLayerAfterWarmup()
         }
     }
 
     private func hidePreviewLayerForWarmup(_ previewLayer: AVCaptureVideoPreviewLayer) {
-        previewWarmupToken += 1
+        markPreviewUnavailable()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        previewLayer.opacity = 1
+        previewLayer.opacity = 0
         CATransaction.commit()
     }
 
-    private func revealPreviewLayerAfterWarmup() {
-        guard let previewLayer else { return }
+    private func markPreviewUnavailable() {
+        previewWarmupToken += 1
+        previewHasVisibleFrame = false
+        previewVisibleFrameCount = 0
+        DispatchQueue.main.async { [weak self] in
+            self?.isPreviewReady = false
+        }
+    }
 
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        previewLayer.opacity = 1
-        CATransaction.commit()
+    private func revealPreviewLayerAfterVisibleFrame() {
+        let token = previewWarmupToken
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  self.previewWarmupToken == token,
+                  let previewLayer = self.previewLayer else {
+                return
+            }
+
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            previewLayer.opacity = 1
+            CATransaction.commit()
+            self.isPreviewReady = true
+        }
     }
 
     private func configureSession() {
@@ -377,6 +396,10 @@ final class CameraCaptureManager: NSObject, ObservableObject {
               currentVideoInput?.device.uniqueID != device.uniqueID,
               let nextInput = try? AVCaptureDeviceInput(device: device) else {
             return
+        }
+
+        if let previewLayer {
+            hidePreviewLayerForWarmup(previewLayer)
         }
 
         session.beginConfiguration()
@@ -967,10 +990,11 @@ final class CameraCaptureManager: NSObject, ObservableObject {
         let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
         guard width > 0, height > 0, bytesPerRow > 0 else { return false }
 
-        let sampleColumns = min(18, width)
-        let sampleRows = min(18, height)
+        let sampleColumns = min(24, width)
+        let sampleRows = min(24, height)
         var totalLuma = 0
-        var maxLuma = 0
+        var visibleSamples = 0
+        var strongSamples = 0
         var samples = 0
 
         for rowIndex in 0..<sampleRows {
@@ -985,14 +1009,22 @@ final class CameraCaptureManager: NSObject, ObservableObject {
                 let red = Int(row[pixelIndex + 2])
                 let luma = (red * 299 + green * 587 + blue * 114) / 1000
                 totalLuma += luma
-                maxLuma = max(maxLuma, luma)
+                if luma > 18 {
+                    visibleSamples += 1
+                }
+                if luma > 36 {
+                    strongSamples += 1
+                }
                 samples += 1
             }
         }
 
         guard samples > 0 else { return false }
-        let averageLuma = totalLuma / samples
-        return averageLuma > 4 || maxLuma > 18
+        let averageLuma = Double(totalLuma) / Double(samples)
+        let visibleRatio = Double(visibleSamples) / Double(samples)
+        let strongRatio = Double(strongSamples) / Double(samples)
+
+        return (averageLuma > 16 && visibleRatio > 0.14) || visibleRatio > 0.26 || strongRatio > 0.18
     }
 
     private func videoLikelyContainsVisibleFrame(_ url: URL) -> Bool {
@@ -1147,7 +1179,21 @@ extension CameraCaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        latestVideoPixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        latestVideoPixelBuffer = pixelBuffer
+
+        if previewHasVisibleFrame == false {
+            if pixelBufferHasVisiblePixels(pixelBuffer) {
+                previewVisibleFrameCount += 1
+            } else {
+                previewVisibleFrameCount = 0
+            }
+
+            if previewVisibleFrameCount >= 4 {
+                previewHasVisibleFrame = true
+                revealPreviewLayerAfterVisibleFrame()
+            }
+        }
 
         if frameRecordingURL != nil {
             appendFrameRecordingSampleBuffer(sampleBuffer)
