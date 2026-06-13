@@ -93,6 +93,7 @@ struct NotchIslandContainerView: View {
     @State private var cameraRecordPressActive = false
     @State private var cameraRecordPressStartedRecording = false
     @State private var hoveredCameraCaptureID: UUID?
+    @State private var isCameraOpening = false
     @State private var isCameraPreviewWarm = true
     @State private var cameraPreviewWarmToken = 0
     @State private var copiedTextItemID: UUID?
@@ -229,6 +230,12 @@ struct NotchIslandContainerView: View {
                 syncExpandedHeight()
             }
         }
+        .onChange(of: camera.isPreviewReady) { _, _ in
+            updateCameraOpeningState()
+        }
+        .onChange(of: camera.previewErrorMessage) { _, _ in
+            updateCameraOpeningState()
+        }
         .onChange(of: system.fanMode) { _, newMode in
             if pendingFanModeSelection == newMode {
                 pendingFanModeSelection = nil
@@ -298,17 +305,32 @@ struct NotchIslandContainerView: View {
             prepareCameraPreviewWarmup()
         } else {
             resetCameraPreviewWarmup()
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isCameraOpening = false
+            }
         }
     }
 
     private func prepareCameraPreviewWarmup() {
         cameraPreviewWarmToken += 1
         isCameraPreviewWarm = true
+        updateCameraOpeningState()
     }
 
     private func resetCameraPreviewWarmup() {
         cameraPreviewWarmToken += 1
         isCameraPreviewWarm = true
+    }
+
+    private func updateCameraOpeningState() {
+        let shouldOpen = currentPage == .camera
+            && ui.isExpanded
+            && camera.isPreviewReady == false
+            && camera.previewErrorMessage == nil
+
+        withAnimation(.easeInOut(duration: 0.24)) {
+            isCameraOpening = shouldOpen
+        }
     }
 
     private var notchShape: BottomRoundedRectangle {
@@ -1880,12 +1902,44 @@ struct NotchIslandContainerView: View {
             .scaleEffect(x: -1, y: 1, anchor: .center)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(cameraPreviewEffects(cornerRadius: cornerRadius))
+            .overlay(cameraOpeningOverlay(size: size, cornerRadius: cornerRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.36), radius: 12, y: 5)
             .animation(.snappy(duration: 0.24, extraBounce: 0.03), value: isCameraPreviewExpanded)
+    }
+
+    @ViewBuilder
+    private func cameraOpeningOverlay(size: CGSize, cornerRadius: CGFloat) -> some View {
+        if isCameraOpening {
+            ZStack {
+                Color.black.opacity(0.78)
+
+                ShutterAnimationView()
+                    .frame(
+                        width: min(size.width, size.height) * 0.58,
+                        height: min(size.width, size.height) * 0.58
+                    )
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .transition(.opacity.combined(with: .scale(scale: 0.94)))
+            .allowsHitTesting(false)
+        } else if let message = camera.previewErrorMessage, currentPage == .camera {
+            ZStack {
+                Color.black.opacity(0.82)
+
+                Text(message)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.72))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 18)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            .allowsHitTesting(false)
+        }
     }
 
     private var cameraUtilityStack: some View {
@@ -3335,6 +3389,91 @@ private extension View {
 
     func memoryDetailPanelStyle() -> some View {
         self.systemDetailPanelStyle()
+    }
+}
+
+private struct ShutterAnimationView: View {
+    @State private var openAmount: CGFloat = 0.16
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = min(proxy.size.width, proxy.size.height)
+
+            ZStack {
+                Circle()
+                    .fill(Color.black.opacity(0.22))
+
+                ForEach(0..<7, id: \.self) { index in
+                    ShutterBlade(openAmount: openAmount)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.34),
+                                    Color.white.opacity(0.12)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            ShutterBlade(openAmount: openAmount)
+                                .stroke(Color.white.opacity(0.10), lineWidth: max(0.7, size * 0.006))
+                        )
+                        .rotationEffect(.degrees(Double(index) * 360.0 / 7.0))
+                        .shadow(color: .black.opacity(0.28), radius: 3, y: 1)
+                }
+
+                Circle()
+                    .stroke(Color.white.opacity(0.24), lineWidth: max(1.0, size * 0.016))
+                    .frame(
+                        width: size * (0.22 + openAmount * 0.34),
+                        height: size * (0.22 + openAmount * 0.34)
+                    )
+
+                Circle()
+                    .fill(Color.black.opacity(0.42))
+                    .frame(
+                        width: size * (0.14 + openAmount * 0.24),
+                        height: size * (0.14 + openAmount * 0.24)
+                    )
+            }
+            .frame(width: size, height: size)
+            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .onAppear {
+            openAmount = 0.16
+            withAnimation(.easeInOut(duration: 0.86).repeatForever(autoreverses: true)) {
+                openAmount = 0.82
+            }
+        }
+    }
+}
+
+private struct ShutterBlade: Shape {
+    var openAmount: CGFloat
+
+    var animatableData: CGFloat {
+        get { openAmount }
+        set { openAmount = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let size = min(rect.width, rect.height)
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let clampedOpen = min(1, max(0, openAmount))
+        let inner = size * (0.04 + clampedOpen * 0.22)
+        let outer = size * 0.54
+        let halfBlade = size * (0.16 - clampedOpen * 0.025)
+        let skew = size * (0.13 + clampedOpen * 0.04)
+
+        var path = Path()
+        path.move(to: CGPoint(x: center.x + inner, y: center.y - halfBlade))
+        path.addLine(to: CGPoint(x: center.x + outer, y: center.y - halfBlade - skew))
+        path.addLine(to: CGPoint(x: center.x + outer, y: center.y + halfBlade + skew * 0.36))
+        path.addLine(to: CGPoint(x: center.x + inner, y: center.y + halfBlade))
+        path.closeSubpath()
+        return path
     }
 }
 

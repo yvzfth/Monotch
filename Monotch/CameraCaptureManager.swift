@@ -32,6 +32,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
 
     @Published var isRecording = false
     @Published private(set) var isPreviewReady = false
+    @Published private(set) var previewErrorMessage: String?
     @Published var captures: [CameraCaptureItem] = [] {
         didSet { saveCapturesIfNeeded() }
     }
@@ -97,14 +98,17 @@ final class CameraCaptureManager: NSObject, ObservableObject {
     func startIfAllowed() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
+            setPreviewError(nil)
             configureAndStart()
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
                 DispatchQueue.main.async {
                     self?.permissionDenied = !granted
                     if granted {
+                        self?.setPreviewError(nil)
                         self?.configureAndStart()
                     } else {
+                        self?.setPreviewError("Camera access denied")
                         self?.markPreviewUnavailable()
                         self?.previewLayer?.removeFromSuperlayer()
                         self?.previewLayer = nil
@@ -113,6 +117,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
             }
         default:
             permissionDenied = true
+            setPreviewError("Camera access denied")
             markPreviewUnavailable()
             previewLayer?.removeFromSuperlayer()
             previewLayer = nil
@@ -286,6 +291,12 @@ final class CameraCaptureManager: NSObject, ObservableObject {
         }
     }
 
+    private func setPreviewError(_ message: String?) {
+        DispatchQueue.main.async { [weak self] in
+            self?.previewErrorMessage = message
+        }
+    }
+
     private func revealPreviewLayerAfterVisibleFrame() {
         let token = previewWarmupToken
 
@@ -300,6 +311,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
             CATransaction.setDisableActions(true)
             previewLayer.opacity = 1
             CATransaction.commit()
+            self.previewErrorMessage = nil
             self.isPreviewReady = true
         }
     }
@@ -311,6 +323,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
         guard let device = preferredVideoDevice(),
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input) else {
+            setPreviewError("Camera unavailable")
             return
         }
 
