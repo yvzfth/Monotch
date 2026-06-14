@@ -91,9 +91,21 @@ final class NotchWindowController {
         }
     }
 
+    func showExpanded() {
+        createWindowIfNeeded()
+        ui.isExpanded = true
+        if let win = window {
+            positionWindow()
+            win.alphaValue = 1
+            win.orderFrontRegardless()
+            startExpandedPointerWatchdog()
+        }
+    }
+
     func pointerEnteredNotch() {
         pendingCollapse?.cancel()
-        guard ui.isExpanded == false else { return }
+        let openOnHover = UserDefaults.standard.object(forKey: MonotchSettingsKey.openOnHover) as? Bool ?? true
+        guard openOnHover, ui.isExpanded == false else { return }
         ui.isExpanded = true
     }
 

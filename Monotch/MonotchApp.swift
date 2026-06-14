@@ -11,30 +11,13 @@ import AppKit
 @main
 struct MonotchApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @ObservedObject private var ui = NotchUIState.shared
 
     var body: some Scene {
-        MenuBarExtra("Monotch", systemImage: "rectangle.topthird.inset.filled") {
-            Button("Göster / Gizle") {
-                NotchWindowController.shared.toggle()
-            }
-            Toggle("Nub hep görünsün", isOn: $ui.isPinned)
-                .onChange(of: ui.isPinned) { _, pinned in
-                    if pinned {
-                        NotchWindowController.shared.showCollapsed()
-                    } else {
-                        NotchWindowController.shared.hideCompletely()
-                    }
-                }
-            Divider()
-            Button("Quit") {
-                NSApp.terminate(nil)
-            }
-        }
-        .menuBarExtraStyle(.window)
-
         Settings {
             SettingsView()
+        }
+        .commands {
+            MonotchCommands()
         }
     }
 }

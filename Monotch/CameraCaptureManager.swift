@@ -239,6 +239,16 @@ final class CameraCaptureManager: NSObject, ObservableObject {
         }
     }
 
+    func clearCaptures() {
+        DispatchQueue.main.async {
+            let urls = self.captures.map(\.url)
+            self.captures = []
+            for url in urls {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
     func switchCamera() {
         startIfAllowed()
 

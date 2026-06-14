@@ -215,6 +215,33 @@ final class ClipboardManager: ObservableObject {
         }
     }
 
+    @discardableResult
+    func copyLatestTextToPasteboard() -> Bool {
+        guard let item = recentTextItems.first else { return false }
+        copyTextToPasteboard(item)
+        return true
+    }
+
+    @discardableResult
+    func copyLatestImageToPasteboard() -> Bool {
+        guard let item = recentImageItems.first else { return false }
+        copyImageToPasteboard(item)
+        return true
+    }
+
+    @discardableResult
+    func copyLatestFileToPasteboard() -> Bool {
+        guard let item = recentFileItems.first else { return false }
+        copyFileToPasteboard(item)
+        return true
+    }
+
+    func clearHistory() {
+        recentTextItems = []
+        recentImageItems = []
+        recentFileItems = []
+    }
+
     func copyTextToPasteboard(_ item: ClipboardTextItem) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
