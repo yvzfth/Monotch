@@ -1071,7 +1071,7 @@ private struct LyricsContent {
 }
 
 private final class LRCLIBLyricsClient {
-    private static let requestTimeout: TimeInterval = 5.0
+    private static let requestTimeout: TimeInterval = 12.0
     private static let lookupTimeout: TimeInterval = 12.0
 
     private let decoder = JSONDecoder()
