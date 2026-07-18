@@ -18,8 +18,10 @@ final class NotchWindowController {
     private var pendingCollapse: DispatchWorkItem?
     private var expandedPointerWatchdog: Timer?
 
-    private let expandedWidth: CGFloat = NotchIslandMetrics.expandedWidth
-    private let collapsedSize = NotchIslandMetrics.collapsedSize
+    // Window never resizes: it is always large enough for the fully expanded
+    // island, and SwiftUI animates the island inside it. Resizing the window
+    // in step with SwiftUI layout caused AppKit update-constraints loops.
+    private let windowSize = CGSize(width: NotchIslandMetrics.expandedWidth + 80, height: 440)
     private let topOverlap: CGFloat = NotchIslandMetrics.topOverlap
 
     private init() {
@@ -28,20 +30,11 @@ final class NotchWindowController {
         ui.$isExpanded
             .removeDuplicates()
             .sink { [weak self] expanded in
-                self?.animateSizeChange(expanded: expanded)
                 if expanded {
                     self?.startExpandedPointerWatchdog()
                 } else {
                     self?.stopExpandedPointerWatchdog()
                 }
-            }
-            .store(in: &cancellables)
-
-        ui.$expandedHeight
-            .removeDuplicates()
-            .sink { [weak self] _ in
-                guard self?.ui.isExpanded == true else { return }
-                self?.animateSizeChange(expanded: true)
             }
             .store(in: &cancellables)
 
@@ -138,8 +131,8 @@ final class NotchWindowController {
         guard window == nil else { return }
         guard let screen = NSScreen.main else { return }
 
-        let notchWidth: CGFloat = collapsedSize.width
-        let notchHeight: CGFloat = collapsedSize.height
+        let notchWidth: CGFloat = windowSize.width
+        let notchHeight: CGFloat = windowSize.height
 
         let screenFrame = screen.frame
         let originX = screenFrame.midX - notchWidth / 2
@@ -163,6 +156,7 @@ final class NotchWindowController {
 
         let content = NotchIslandContainerView()
         let hosting = NSHostingView(rootView: content)
+        hosting.sizingOptions = []
         hosting.frame = window.contentView!.bounds
         hosting.autoresizingMask = [.width, .height]
         window.contentView = hosting
@@ -247,20 +241,34 @@ final class NotchWindowController {
     }
 
     private func isPointerInsideNotch() -> Bool {
-        guard let window else { return false }
-
         let point = NSEvent.mouseLocation
-        let hitFrame = window.frame.insetBy(dx: ui.isExpanded ? -2 : -8, dy: ui.isExpanded ? -2 : -6)
+        let hitFrame = islandFrame().insetBy(dx: ui.isExpanded ? -2 : -8, dy: ui.isExpanded ? -2 : -6)
         return hitFrame.contains(point)
+    }
+
+    // The island is pinned to the top-center of the fixed-size window.
+    private func islandFrame() -> NSRect {
+        guard let window else { return .zero }
+
+        let size = ui.isExpanded
+            ? CGSize(width: NotchIslandMetrics.expandedWidth, height: ui.expandedHeight)
+            : NotchIslandMetrics.collapsedSize
+        let windowFrame = window.frame
+
+        return NSRect(
+            x: windowFrame.midX - size.width / 2,
+            y: windowFrame.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
     }
 
     private func positionWindow() {
         guard let window else { return }
 
         let screenFrame = screenFrame(for: window)
-        let target = ui.isExpanded ? expandedSize : collapsedSize
-        let notchWidth = target.width
-        let notchHeight = target.height
+        let notchWidth = windowSize.width
+        let notchHeight = windowSize.height
 
         let originX = screenFrame.midX - notchWidth / 2
         let originY = screenFrame.maxY - notchHeight + topOverlap
@@ -268,43 +276,6 @@ final class NotchWindowController {
         window.setFrame(
             NSRect(x: originX, y: originY, width: notchWidth, height: notchHeight),
             display: true
-        )
-    }
-
-    private func animateSizeChange(expanded: Bool) {
-        guard let window else { return }
-        guard window.isVisible else { return }
-
-        let newFrame = targetFrame(expanded: expanded, for: window)
-
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = expanded ? 0.14 : 0.11
-            context.timingFunction = CAMediaTimingFunction(name: expanded ? .easeOut : .easeInEaseOut)
-            window.animator().setFrame(newFrame, display: true)
-        }, completionHandler: { [weak self] in
-            self?.window?.setFrame(newFrame, display: true)
-        })
-    }
-
-    private func targetFrame(expanded: Bool, for window: NSWindow) -> NSRect {
-        let target = expanded ? expandedSize : collapsedSize
-        let screenFrame = screenFrame(for: window)
-
-        let centerX: CGFloat
-        let topY: CGFloat
-        if expanded {
-            centerX = screenFrame.midX
-            topY = screenFrame.maxY + topOverlap
-        } else {
-            centerX = window.frame.midX
-            topY = window.frame.maxY
-        }
-
-        return NSRect(
-            x: centerX - target.width / 2,
-            y: topY - target.height,
-            width: target.width,
-            height: target.height
         )
     }
 
@@ -324,9 +295,5 @@ final class NotchWindowController {
         }
 
         return NSScreen.main?.frame ?? window.frame
-    }
-
-    private var expandedSize: CGSize {
-        CGSize(width: expandedWidth, height: ui.expandedHeight)
     }
 }

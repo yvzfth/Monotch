@@ -116,6 +116,7 @@ struct NotchIslandContainerView: View {
     @State private var tabScrollAccumulatedDelta: CGFloat = 0
     @State private var tabScrollGestureConsumed = false
     @State private var tabScrollGestureToken = 0
+    @State private var lastTabSwitchDate = Date.distantPast
     @State private var tabTransitionDirection = 1
     @State private var isKeyboardTabSwitchLocked = false
     @State private var mediaScrollAccumulatedDelta: CGFloat = 0
@@ -181,9 +182,18 @@ struct NotchIslandContainerView: View {
                 .fill(Color.black)
                 .overlay(
                     notchShape
-                        .stroke(Color.white.opacity(ui.isExpanded ? 0.10 : 0.06), lineWidth: 1)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(ui.isExpanded ? 0.32 : 0.20),
+                                    Color.white.opacity(0.05)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 1
+                        )
                 )
-                .shadow(color: .black.opacity(ui.isExpanded ? 0.55 : 0.25), radius: ui.isExpanded ? 18 : 7, y: 8)
 
             Group {
                 if ui.isExpanded {
@@ -218,9 +228,16 @@ struct NotchIslandContainerView: View {
             }
         }
         .clipShape(notchShape)
-        .compositingGroup()
-        .shadow(color: .black.opacity(ui.isExpanded ? 0.48 : 0.20), radius: ui.isExpanded ? 18 : 7, y: 8)
+        .background(
+            // Shadow lives on its own static shape layer so content redraws
+            // (tab hovers, page transitions, collapse) never re-rasterize it.
+            notchShape
+                .fill(Color.black)
+                .shadow(color: .black.opacity(ui.isExpanded ? 0.52 : 0.30), radius: ui.isExpanded ? 12 : 6, y: ui.isExpanded ? 6 : 3)
+                .shadow(color: .black.opacity(ui.isExpanded ? 0.28 : 0.14), radius: ui.isExpanded ? 30 : 14, y: ui.isExpanded ? 16 : 8)
+        )
         .contentShape(notchShape)
+        .environment(\.colorScheme, .dark)
         .onHover { hovering in
             if hovering {
                 NotchWindowController.shared.pointerEnteredNotch()
@@ -234,7 +251,13 @@ struct NotchIslandContainerView: View {
             }
             .allowsHitTesting(false)
         )
-        .animation(.easeOut(duration: ui.isExpanded ? 0.14 : 0.11), value: ui.isExpanded)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(
+            ui.isExpanded
+                ? .spring(response: 0.38, dampingFraction: 0.86)
+                : .spring(response: 0.30, dampingFraction: 0.94),
+            value: ui.isExpanded
+        )
         .onAppear {
             syncExpandedHeight()
             updateVisiblePageWork()
@@ -708,7 +731,13 @@ struct NotchIslandContainerView: View {
             return true
         }
 
+        // Even while scrolling continuously, hold each tab for at least 0.3 s.
+        guard Date().timeIntervalSince(lastTabSwitchDate) >= 0.3 else {
+            return true
+        }
+
         tabScrollGestureConsumed = true
+        lastTabSwitchDate = Date()
         let direction = tabScrollAccumulatedDelta > 0 ? -1 : 1
         switchToPageIndex(currentPageIndex + direction, direction: direction)
         return true
@@ -1417,9 +1446,9 @@ private var fanSensorsCard: some View {
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .fill(Color.white.opacity(0.14))
                             .matchedGeometryEffect(id: "fanModeSelection", in: fanModeSelectionNamespace)
+                            .transition(.opacity)
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(isEnabled == false)
@@ -3736,16 +3765,43 @@ private struct FanRotorIcon: View {
     let tint: Color
     let size: CGFloat
 
+    @State private var spinBaseAngle: Double = 0
+    @State private var spinFromSpeed: Double = 0
+    @State private var spinStartDate = Date()
+
+    // How quickly the rotor approaches its target speed (1/s); ~0.6 s time constant.
+    private static let spinResponse: Double = 1.6
+
     var body: some View {
-        ZStack {
-            if rpm > 20 {
-                TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
-                    fanBlade(degrees: fanRotationDegrees(at: context.date))
-                }
-            } else {
-                fanBlade(degrees: 0)
-            }
+        TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
+            fanBlade(degrees: spinAngle(at: context.date))
         }
+        .onAppear {
+            spinFromSpeed = Self.speed(forRPM: rpm)
+            spinStartDate = Date()
+        }
+        .onChange(of: rpm) { oldRPM, _ in
+            let now = Date()
+            let oldTarget = Self.speed(forRPM: oldRPM)
+            let elapsed = max(0, now.timeIntervalSince(spinStartDate))
+            let decay = exp(-Self.spinResponse * elapsed)
+
+            spinBaseAngle = spinAngle(at: now, target: oldTarget)
+            spinFromSpeed = oldTarget + (spinFromSpeed - oldTarget) * decay
+            spinStartDate = now
+        }
+    }
+
+    private static func speed(forRPM rpm: Double) -> Double {
+        rpm > 20 ? min(5.0, max(0.35, rpm / 1500)) : 0
+    }
+
+    private func spinAngle(at date: Date, target: Double? = nil) -> Double {
+        let target = target ?? Self.speed(forRPM: rpm)
+        let elapsed = max(0, date.timeIntervalSince(spinStartDate))
+        let drift = (spinFromSpeed - target) / Self.spinResponse * (1 - exp(-Self.spinResponse * elapsed))
+        return (spinBaseAngle + 360 * (target * elapsed + drift))
+            .truncatingRemainder(dividingBy: 360)
     }
 
     private func fanBlade(degrees: Double) -> some View {
@@ -3772,11 +3828,6 @@ private struct FanRotorIcon: View {
             )
     }
 
-    private func fanRotationDegrees(at date: Date) -> Double {
-        let rotationsPerSecond = min(5.0, max(0.35, rpm / 1500))
-        return (date.timeIntervalSinceReferenceDate * 360 * rotationsPerSecond)
-            .truncatingRemainder(dividingBy: 360)
-    }
 }
 
 private struct MediaSharePayload: Identifiable {
