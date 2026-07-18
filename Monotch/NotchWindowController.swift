@@ -18,9 +18,9 @@ final class NotchWindowController {
     private var pendingCollapse: DispatchWorkItem?
     private var expandedPointerWatchdog: Timer?
 
-    private let expandedWidth: CGFloat = 440
-    private let collapsedSize = CGSize(width: 184, height: 24)
-    private let topOverlap: CGFloat = 10
+    private let expandedWidth: CGFloat = NotchIslandMetrics.expandedWidth
+    private let collapsedSize = NotchIslandMetrics.collapsedSize
+    private let topOverlap: CGFloat = NotchIslandMetrics.topOverlap
 
     private init() {
         createWindowIfNeeded()

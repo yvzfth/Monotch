@@ -202,12 +202,17 @@ struct NotchIslandContainerView: View {
                         .zIndex(1)
                 }
             }
+            .padding(.horizontal, currentTailRadius)
 
         }
-        .frame(width: ui.isExpanded ? 440 : 184, height: ui.isExpanded ? ui.expandedHeight : 24)
+        .frame(
+            width: ui.isExpanded ? NotchIslandMetrics.expandedWidth : NotchIslandMetrics.collapsedSize.width,
+            height: ui.isExpanded ? ui.expandedHeight : NotchIslandMetrics.collapsedSize.height
+        )
         .overlay(alignment: .top) {
             if ui.isExpanded {
                 topIconBar
+                    .padding(.horizontal, currentTailRadius)
                     .transition(.opacity)
                     .zIndex(3)
             }
@@ -366,7 +371,15 @@ struct NotchIslandContainerView: View {
     }
 
     private var notchShape: BottomRoundedRectangle {
-        BottomRoundedRectangle(radius: ui.isExpanded ? 28 : 12)
+        BottomRoundedRectangle(
+            radius: ui.isExpanded ? 28 : 12,
+            tailRadius: currentTailRadius,
+            tailTopInset: NotchIslandMetrics.topOverlap
+        )
+    }
+
+    private var currentTailRadius: CGFloat {
+        ui.isExpanded ? NotchIslandMetrics.expandedTailRadius : NotchIslandMetrics.collapsedTailRadius
     }
 
     private var expandedContent: some View {
@@ -3827,23 +3840,53 @@ private struct MediaShareSheetPresenter: NSViewRepresentable {
 
 private struct BottomRoundedRectangle: Shape {
     var radius: CGFloat
+    var tailRadius: CGFloat = 0
+    var tailTopInset: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
-        let radius = min(radius, rect.width / 2, rect.height)
+        let tail = min(tailRadius, rect.width / 2)
+        let bodyMinX = rect.minX + tail
+        let bodyMaxX = rect.maxX - tail
+        let tailTop = rect.minY + tailTopInset
+        let radius = min(radius, (bodyMaxX - bodyMinX) / 2, rect.height)
 
         var path = Path()
         path.move(to: rect.origin)
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
+
+        if tail > 0 {
+            path.addLine(to: CGPoint(x: rect.maxX, y: tailTop))
+            path.addArc(
+                center: CGPoint(x: rect.maxX, y: tailTop + tail),
+                radius: tail,
+                startAngle: .degrees(-90),
+                endAngle: .degrees(-180),
+                clockwise: true
+            )
+        }
+
+        path.addLine(to: CGPoint(x: bodyMaxX, y: rect.maxY - radius))
         path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
+            to: CGPoint(x: bodyMaxX - radius, y: rect.maxY),
+            control: CGPoint(x: bodyMaxX, y: rect.maxY)
         )
-        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+        path.addLine(to: CGPoint(x: bodyMinX + radius, y: rect.maxY))
         path.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY - radius),
-            control: CGPoint(x: rect.minX, y: rect.maxY)
+            to: CGPoint(x: bodyMinX, y: rect.maxY - radius),
+            control: CGPoint(x: bodyMinX, y: rect.maxY)
         )
+
+        if tail > 0 {
+            path.addLine(to: CGPoint(x: bodyMinX, y: tailTop + tail))
+            path.addArc(
+                center: CGPoint(x: rect.minX, y: tailTop + tail),
+                radius: tail,
+                startAngle: .degrees(0),
+                endAngle: .degrees(-90),
+                clockwise: true
+            )
+        }
+
         path.addLine(to: rect.origin)
         path.closeSubpath()
         return path

@@ -2,6 +2,25 @@ import Foundation
 import Combine
 import CoreGraphics
 
+enum NotchIslandMetrics {
+    static let expandedBodyWidth: CGFloat = 440
+    static let collapsedBodySize = CGSize(width: 184, height: 24)
+    static let expandedTailRadius: CGFloat = 12
+    static let collapsedTailRadius: CGFloat = 6
+    static let topOverlap: CGFloat = 10
+
+    static var expandedWidth: CGFloat {
+        expandedBodyWidth + expandedTailRadius * 2
+    }
+
+    static var collapsedSize: CGSize {
+        CGSize(
+            width: collapsedBodySize.width + collapsedTailRadius * 2,
+            height: collapsedBodySize.height
+        )
+    }
+}
+
 struct NotchPageRequest: Equatable {
     let id = UUID()
     let rawValue: Int
