@@ -1,61 +1,61 @@
 {
   "images" : [
     {
-      "filename" : "Mu25c.png",
+      "filename" : "icon_16x16.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "16x16"
     },
     {
-      "filename" : "dQpAf 1.png",
+      "filename" : "icon_16x16@2x.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "16x16"
     },
     {
-      "filename" : "dQpAf.png",
+      "filename" : "icon_32x32.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "32x32"
     },
     {
-      "filename" : "6XDC7.png",
+      "filename" : "icon_32x32@2x.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "32x32"
     },
     {
-      "filename" : "uKlwa.png",
+      "filename" : "icon_128x128.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "128x128"
     },
     {
-      "filename" : "CXiIS 1.png",
+      "filename" : "icon_128x128@2x.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "128x128"
     },
     {
-      "filename" : "CXiIS.png",
+      "filename" : "icon_256x256.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "256x256"
     },
     {
-      "filename" : "PVP8Z 1.png",
+      "filename" : "icon_256x256@2x.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "256x256"
     },
     {
-      "filename" : "PVP8Z.png",
+      "filename" : "icon_512x512.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "512x512"
     },
     {
-      "filename" : "Gemini_Generated_Image_6x65dm6x65dm6x65.png",
+      "filename" : "icon_512x512@2x.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "512x512"
