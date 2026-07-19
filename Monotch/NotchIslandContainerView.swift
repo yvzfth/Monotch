@@ -476,7 +476,7 @@ struct NotchIslandContainerView: View {
     private static let systemCardSpacing: CGFloat = 8
     private static let systemFansCardHeight: CGFloat = 134
     private static let systemSensorsCardHeight: CGFloat = 84
-    private static let systemDetailContentHeight: CGFloat = 292
+    private static let systemDetailPanelHeight: CGFloat = systemDetailPanelFixedHeight
 
     private func expandedHeight(for page: WidgetPage) -> CGFloat {
         switch page {
@@ -497,7 +497,10 @@ struct NotchIslandContainerView: View {
     }
 
     private var systemContentHeight: CGFloat {
-        if hoveredSystemStat != nil { return Self.systemDetailContentHeight }
+        if hoveredSystemStat != nil {
+            let statRow = visibleSystemStatCards.isEmpty ? 0 : Self.systemStatRowHeight + Self.systemCardSpacing
+            return statRow + Self.systemDetailPanelHeight
+        }
 
         var blocks: [CGFloat] = []
         if visibleSystemStatCards.isEmpty == false {
@@ -957,25 +960,40 @@ struct NotchIslandContainerView: View {
 
             if let hoveredSystemStat {
                 systemDetailPanel(for: hoveredSystemStat)
-                    .transition(.opacity)
+                    .transition(.asymmetric(
+                        insertion: .opacity
+                            .combined(with: .scale(scale: 0.92, anchor: .top))
+                            .combined(with: .offset(y: -8)),
+                        removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
+                    ))
                     .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .onTapGesture {
-                        self.hoveredSystemStat = nil
+                        setHoveredSystemStat(nil)
                     }
             } else {
                 fanControlPanel
-                    .transition(.opacity)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .top)),
+                        removal: .opacity
+                    ))
             }
         }
-        .animation(.easeOut(duration: 0.14), value: hoveredSystemStat)
+        .animation(.spring(response: 0.34, dampingFraction: 0.84), value: hoveredSystemStat)
         .frame(height: systemPageHeight, alignment: .top)
         .background(
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    hoveredSystemStat = nil
+                    setHoveredSystemStat(nil)
                 }
         )
+    }
+
+    private func setHoveredSystemStat(_ kind: SystemStatKind?) {
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+            hoveredSystemStat = kind
+            syncExpandedHeight()
+        }
     }
 
     private var visibleSystemStatCards: [MonotchSystemCard] {
@@ -1071,7 +1089,7 @@ struct NotchIslandContainerView: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .onTapGesture {
-            hoveredSystemStat = hoveredSystemStat == kind ? nil : kind
+            setHoveredSystemStat(hoveredSystemStat == kind ? nil : kind)
         }
     }
 
@@ -1679,6 +1697,7 @@ private var fanSensorsCard: some View {
                         .foregroundColor(.white.opacity(0.92))
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
+                        .contentTransition(.numericText(value: fan.currentRPM))
                     Text("rpm")
                         .font(.system(size: 8.5, weight: .medium, design: .rounded))
                         .foregroundColor(.white.opacity(0.45))
@@ -1704,6 +1723,7 @@ private var fanSensorsCard: some View {
         }
         .padding(.horizontal, 9)
         .frame(maxWidth: .infinity, minHeight: 74)
+        .animation(.easeInOut(duration: 0.6), value: fan.currentRPM)
         .background(
             LinearGradient(
                 colors: [tint.opacity(0.07), Color.black.opacity(0.16)],
@@ -3759,12 +3779,14 @@ private extension SystemMonitorManager.StorageCategory.Kind {
     }
 }
 
+private let systemDetailPanelFixedHeight: CGFloat = 120
+
 private extension View {
     func systemDetailPanelStyle() -> some View {
         self
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, minHeight: 116, maxHeight: 116, alignment: .center)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: systemDetailPanelFixedHeight, maxHeight: systemDetailPanelFixedHeight, alignment: .center)
             .background(
                 LinearGradient(
                     colors: [Color.white.opacity(0.062), Color.white.opacity(0.034)],
