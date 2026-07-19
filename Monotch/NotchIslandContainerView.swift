@@ -487,7 +487,7 @@ struct NotchIslandContainerView: View {
         case .system:
             return WidgetPage.system.topInset + systemContentHeight + WidgetPage.system.bottomInset
         case .multimedia:
-            return page.expandedHeight
+            return page.expandedHeight + mediaSourceListHeight
         }
     }
 
@@ -930,8 +930,12 @@ struct NotchIslandContainerView: View {
                 }
 
                 mediaBottomArea
+
+                if extraMediaSources.isEmpty == false {
+                    mediaSourceList
+                }
             }
-            .frame(height: 76)
+            .frame(height: 76 + mediaSourceListHeight)
         case .clipboard:
             clipboardPage
         case .system:
@@ -2964,6 +2968,79 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
             mediaVolumeControl
         }
         .fixedSize(horizontal: true, vertical: false)
+    }
+
+    // Other active media sessions, listed under the main player the way the
+    // macOS menu bar Now Playing item stacks multiple players.
+    private var extraMediaSources: [MediaSourceInfo] {
+        let activeID = nowPlaying.selectedSourceID ?? "system"
+        return nowPlaying.availableSources.filter { $0.id != activeID }
+    }
+
+    private static let mediaSourceRowHeight: CGFloat = 34
+    private static let mediaSourceRowSpacing: CGFloat = 5
+
+    private var mediaSourceListHeight: CGFloat {
+        let count = CGFloat(extraMediaSources.count)
+        guard count > 0 else { return 0 }
+        return count * (Self.mediaSourceRowHeight + Self.mediaSourceRowSpacing) + 3
+    }
+
+    private var mediaSourceList: some View {
+        VStack(spacing: Self.mediaSourceRowSpacing) {
+            ForEach(extraMediaSources) { source in
+                mediaSourceRow(source)
+            }
+        }
+        .padding(.top, 3)
+    }
+
+    private func mediaSourceRow(_ source: MediaSourceInfo) -> some View {
+        HStack(spacing: 8) {
+            Group {
+                if let image = nowPlaying.sourceArtworks[source.id] {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.55))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.white.opacity(0.08))
+                }
+            }
+            .frame(width: 24, height: 24)
+            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(source.title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(source.displayName)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.white.opacity(0.55))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            mediaButton(systemName: source.isPlaying ? "pause.fill" : "play.fill") {
+                nowPlaying.togglePlayPause(sourceID: source.id)
+            }
+        }
+        .padding(.horizontal, 7)
+        .frame(height: Self.mediaSourceRowHeight)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.055))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onTapGesture {
+            nowPlaying.selectSource(source.id)
+        }
     }
 
     private var mediaShareButton: some View {

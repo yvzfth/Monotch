@@ -2,12 +2,21 @@ import Foundation
 import Combine
 import AppKit
 import ApplicationServices
+import CoreAudio
 import CoreGraphics
 
 struct InlineLyricsWindow: Equatable {
     var previous: String?
     var current: String
     var next: String?
+}
+
+struct MediaSourceInfo: Identifiable, Equatable {
+    /// "system" for the system-wide MediaRemote session, else the player's bundle identifier.
+    let id: String
+    let displayName: String
+    let title: String
+    let isPlaying: Bool
 }
 
 final class NowPlayingManager: ObservableObject {
@@ -21,6 +30,9 @@ final class NowPlayingManager: ObservableObject {
     @Published var artwork: NSImage?
     @Published var duration: Double = 0
     @Published var playerPosition: Double = 0
+    @Published var availableSources: [MediaSourceInfo] = []
+    @Published var selectedSourceID: String?
+    @Published private(set) var sourceArtworks: [String: NSImage] = [:]
 
     private var observers: [Any] = []
     private var lastKnownPlayer: PlayerApp = .music
@@ -32,6 +44,13 @@ final class NowPlayingManager: ObservableObject {
     private var lastPreferredRefresh = Date.distantPast
     private var lastArtworkURL: URL?
     private var scriptCache: [String: NSAppleScript] = [:]
+    private var isExecutingAppleScript = false
+    private let mediaBridge = MediaBridgeClient()
+    private var bridgeEmptyPayloadStreak = 0
+    private var lastBridgePayload: MediaBridgePayload?
+    private var playerSourceRows: [String: MediaSourceInfo] = [:]
+    private var playerArtworkTitleCache: [String: String] = [:]
+    private var progressTickCount = 0
     private let spotifyAccessibility = SpotifyAccessibility()
     private let lyricsClient = LRCLIBLyricsClient()
     private var lyricsCache: [String: LyricsContent] = [:]
@@ -41,6 +60,12 @@ final class NowPlayingManager: ObservableObject {
         startObservingPlayers()
         refreshFromPreferredNowPlaying(allowZeroReset: true)
         startProgressTimer()
+        mediaBridge.start { [weak self] payload in
+            self?.handleBridgePayload(payload)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.refreshPlayerSourceRows()
+        }
     }
 
     deinit {
@@ -48,6 +73,238 @@ final class NowPlayingManager: ObservableObject {
             DistributedNotificationCenter.default().removeObserver(observer)
         }
         progressTimer?.invalidate()
+        mediaBridge.stop()
+    }
+
+    // The MediaRemote bridge sees every player system-wide (browsers included),
+    // so while it delivers data — and the user hasn't pinned another player —
+    // it overrides the per-app AppleScript paths.
+    private var displayFollowsBridge: Bool {
+        mediaBridge.isHealthy && selectedSourceID == nil
+    }
+
+    func selectSource(_ id: String?) {
+        let normalized = id == "system" ? nil : id
+        selectedSourceID = normalized
+
+        if let normalized,
+           let player = PlayerApp.allCases.first(where: { $0.bundleIdentifier == normalized }) {
+            lastKnownPlayer = player
+            lastCommandTarget = .player(player)
+            if let state = readState(from: player) {
+                applyTrackState(state, sourceName: player.displayName, allowZeroReset: true)
+                loadArtworkFromPlayer(player)
+            }
+        } else if let payload = lastBridgePayload, mediaBridge.isHealthy {
+            applyBridgePayloadToDisplay(payload)
+        } else {
+            refreshFromPreferredNowPlaying(allowZeroReset: true)
+        }
+
+        rebuildAvailableSources()
+    }
+
+    private func handleBridgePayload(_ payload: MediaBridgePayload) {
+        let trimmedTitle = payload.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedTitle.isEmpty == false else {
+            lastBridgePayload = nil
+            // MediaRemote blips empty between tracks; only clear when it persists.
+            bridgeEmptyPayloadStreak += 1
+            if bridgeEmptyPayloadStreak >= 2 {
+                rebuildAvailableSources()
+                if selectedSourceID == nil, title != "Not playing" {
+                    title = "Not playing"
+                    artist = ""
+                    album = ""
+                    isPlaying = false
+                    duration = 0
+                    playerPosition = 0
+                    artwork = nil
+                    lastArtworkURL = nil
+                }
+            }
+            return
+        }
+        bridgeEmptyPayloadStreak = 0
+        lastBridgePayload = payload
+        if let image = payload.artwork {
+            sourceArtworks["system"] = image
+        }
+        rebuildAvailableSources()
+
+        guard selectedSourceID == nil else { return }
+        applyBridgePayloadToDisplay(payload)
+    }
+
+    private func applyBridgePayloadToDisplay(_ payload: MediaBridgePayload) {
+        let target = commandTarget(forBundleID: payload.bundleID)
+        lastCommandTarget = target
+        if case let .player(player) = target {
+            lastKnownPlayer = player
+        }
+
+        let resolvedSourceName: String
+        switch target {
+        case .player(let player):
+            resolvedSourceName = player.displayName
+        case .browser(let browser):
+            resolvedSourceName = browser.displayName
+        case .systemMedia:
+            resolvedSourceName = payload.appName.isEmpty ? "System" : payload.appName
+        }
+
+        let didChangeTrack = title != payload.title || artist != payload.artist || album != payload.album
+        applyTrackState(
+            TrackState(
+                title: payload.title,
+                artist: payload.artist,
+                album: payload.album,
+                isPlaying: payload.isPlaying,
+                duration: payload.duration,
+                position: payload.position
+            ),
+            sourceName: resolvedSourceName,
+            allowZeroReset: true
+        )
+
+        if let image = payload.artwork {
+            lastArtworkURL = nil
+            artwork = image
+        } else if didChangeTrack || artwork == nil {
+            if case let .player(player) = target {
+                loadArtworkFromPlayer(player)
+            } else if didChangeTrack {
+                lastArtworkURL = nil
+                artwork = nil
+            }
+        }
+    }
+
+    private func commandTarget(forBundleID bundleID: String) -> PlaybackCommandTarget {
+        if let player = PlayerApp.allCases.first(where: { $0.bundleIdentifier == bundleID }) {
+            return .player(player)
+        }
+
+        if let browser = BrowserPlayerApp.allCases.first(where: { $0.bundleIdentifier == bundleID }) {
+            return .browser(browser)
+        }
+
+        return .systemMedia
+    }
+
+    private func sourceDisplayName(forBundleID bundleID: String, fallback: String) -> String {
+        switch commandTarget(forBundleID: bundleID) {
+        case .player(let player):
+            return player.displayName
+        case .browser(let browser):
+            return browser.displayName
+        case .systemMedia:
+            return fallback.isEmpty ? "System" : fallback
+        }
+    }
+
+    private func rebuildAvailableSources() {
+        var sources: [MediaSourceInfo] = []
+
+        if mediaBridge.isHealthy, let payload = lastBridgePayload {
+            sources.append(MediaSourceInfo(
+                id: "system",
+                displayName: sourceDisplayName(forBundleID: payload.bundleID, fallback: payload.appName),
+                title: payload.title,
+                isPlaying: payload.isPlaying
+            ))
+        }
+
+        for player in PlayerApp.allCases {
+            guard player.isRunning,
+                  player.bundleIdentifier != lastBridgePayload?.bundleID,
+                  let row = playerSourceRows[player.bundleIdentifier] else {
+                continue
+            }
+            sources.append(row)
+        }
+
+        if sources != availableSources {
+            availableSources = sources
+        }
+
+        if let selectedSourceID, sources.contains(where: { $0.id == selectedSourceID }) == false {
+            selectSource(nil)
+        }
+    }
+
+    // AppleScript-read fallback for players whose state predates our launch, so
+    // an already-paused Spotify still shows up as a pickable source.
+    private func refreshPlayerSourceRows() {
+        var didChange = false
+
+        for player in PlayerApp.allCases {
+            guard player.isRunning else {
+                didChange = playerSourceRows.removeValue(forKey: player.bundleIdentifier) != nil || didChange
+                continue
+            }
+
+            guard let state = readState(from: player), state.title.isEmpty == false else { continue }
+            let row = MediaSourceInfo(
+                id: player.bundleIdentifier,
+                displayName: player.displayName,
+                title: state.title,
+                isPlaying: state.isPlaying
+            )
+            if playerSourceRows[player.bundleIdentifier] != row {
+                playerSourceRows[player.bundleIdentifier] = row
+                didChange = true
+            }
+            fetchPlayerRowArtwork(player, title: state.title)
+        }
+
+        if didChange {
+            rebuildAvailableSources()
+        }
+    }
+
+    private func fetchPlayerRowArtwork(_ player: PlayerApp, title: String) {
+        let sourceID = player.bundleIdentifier
+        guard playerArtworkTitleCache[sourceID] != title else { return }
+
+        guard let result = runAppleScriptString(player.artworkScript),
+              result.isEmpty == false else {
+            return
+        }
+        playerArtworkTitleCache[sourceID] = title
+
+        if let url = URL(string: result), url.scheme?.hasPrefix("http") == true {
+            URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+                guard let data, let image = NSImage(data: data) else { return }
+                DispatchQueue.main.async {
+                    self?.sourceArtworks[sourceID] = image
+                }
+            }.resume()
+        } else if let image = NSImage(contentsOf: URL(fileURLWithPath: result)) {
+            sourceArtworks[sourceID] = image
+        }
+    }
+
+    func togglePlayPause(sourceID: String) {
+        if sourceID == "system" {
+            if mediaBridge.isHealthy {
+                mediaBridge.sendCommand("toggle")
+            } else {
+                postMediaKey(.playPause)
+            }
+            return
+        }
+
+        guard let player = PlayerApp.allCases.first(where: { $0.bundleIdentifier == sourceID }) else { return }
+        _ = runAppleScriptCommand("""
+        tell application "\(player.scriptName)"
+            playpause
+        end tell
+        """)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.refreshPlayerSourceRows()
+        }
     }
 
     func previousTrack() {
@@ -62,34 +319,78 @@ final class NowPlayingManager: ObservableObject {
         sendCommand("next track", fallbackMediaKey: .next)
     }
 
+    // Volume goes through CoreAudio: AppleScript's `get volume settings` pumps
+    // the runloop and re-enters NSAppleScript when polled during UI updates,
+    // which crashes inside the OSA component (EXC_BAD_ACCESS at 0x0).
     func currentOutputVolumeState() -> OutputVolumeState {
-        guard let rawValue = runAppleScriptString("""
-        set volumeSettings to get volume settings
-        return (output volume of volumeSettings as text) & "|||" & (output muted of volumeSettings as text)
-        """) else {
+        guard let deviceID = Self.defaultOutputDeviceID() else {
             return OutputVolumeState(level: 0.5, isMuted: false)
         }
 
-        let parts = rawValue.components(separatedBy: "|||")
-        let volume = Double(parts.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 50
-        let muted = parts.dropFirst().first?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .localizedCaseInsensitiveContains("true") == true
+        var volume = Float32(0.5)
+        var volumeSize = UInt32(MemoryLayout<Float32>.size)
+        var volumeAddress = Self.outputPropertyAddress(Self.virtualMainVolumeSelector)
+        AudioObjectGetPropertyData(deviceID, &volumeAddress, 0, nil, &volumeSize, &volume)
 
-        return OutputVolumeState(level: min(1, max(0, volume / 100)), isMuted: muted)
+        var muted = UInt32(0)
+        var mutedSize = UInt32(MemoryLayout<UInt32>.size)
+        var mutedAddress = Self.outputPropertyAddress(kAudioDevicePropertyMute)
+        AudioObjectGetPropertyData(deviceID, &mutedAddress, 0, nil, &mutedSize, &muted)
+
+        return OutputVolumeState(level: min(1, max(0, Double(volume))), isMuted: muted == 1)
     }
 
     func setOutputVolumeLevel(_ level: Double) {
-        let volume = Int((min(1, max(0, level)) * 100).rounded())
-        _ = runAppleScriptCommand("""
-        set volume output volume \(volume) output muted false
-        """)
+        guard let deviceID = Self.defaultOutputDeviceID() else { return }
+
+        var volume = Float32(min(1, max(0, level)))
+        var volumeAddress = Self.outputPropertyAddress(Self.virtualMainVolumeSelector)
+        AudioObjectSetPropertyData(deviceID, &volumeAddress, 0, nil, UInt32(MemoryLayout<Float32>.size), &volume)
+
+        var muted = UInt32(0)
+        var mutedAddress = Self.outputPropertyAddress(kAudioDevicePropertyMute)
+        AudioObjectSetPropertyData(deviceID, &mutedAddress, 0, nil, UInt32(MemoryLayout<UInt32>.size), &muted)
     }
 
     func setOutputMuted(_ isMuted: Bool) {
-        _ = runAppleScriptCommand("""
-        set volume output muted \(isMuted ? "true" : "false")
-        """)
+        guard let deviceID = Self.defaultOutputDeviceID() else { return }
+
+        var muted = UInt32(isMuted ? 1 : 0)
+        var mutedAddress = Self.outputPropertyAddress(kAudioDevicePropertyMute)
+        AudioObjectSetPropertyData(deviceID, &mutedAddress, 0, nil, UInt32(MemoryLayout<UInt32>.size), &muted)
+    }
+
+    // 'vmvc' — kAudioHardwareServiceDeviceProperty_VirtualMainVolume; the
+    // modern CoreAudio headers never got a Swift-visible equivalent.
+    private static let virtualMainVolumeSelector = AudioObjectPropertySelector(0x766D_7663)
+
+    private static func defaultOutputDeviceID() -> AudioDeviceID? {
+        var deviceID = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &size,
+            &deviceID
+        )
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+        return deviceID
+    }
+
+    private static func outputPropertyAddress(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
     }
 
     func currentTrackShareItems() -> [Any] {
@@ -238,6 +539,7 @@ final class NowPlayingManager: ObservableObject {
     }
 
     func refreshNowPlayingIfNeeded(minimumInterval: TimeInterval) {
+        guard displayFollowsBridge == false else { return }
         let now = Date()
         guard now.timeIntervalSince(lastPreferredRefresh) >= minimumInterval else { return }
         lastPreferredRefresh = now
@@ -250,6 +552,26 @@ final class NowPlayingManager: ObservableObject {
         let target = max(0, min(position, duration))
         playerPosition = target
         lastProgressUpdate = Date()
+
+        // Music/Spotify AppleScript seek is the most reliable; for everything
+        // else (browsers, other apps) the bridge seeks through MediaRemote.
+        if case let .player(player) = lastCommandTarget, player.isRunning {
+            _ = runAppleScriptCommand("""
+            tell application "\(player.scriptName)"
+                set player position to \(target)
+            end tell
+            """)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+                self?.refreshPlaybackPosition(allowZeroReset: true)
+            }
+            return
+        }
+
+        if displayFollowsBridge {
+            mediaBridge.seek(to: target)
+            return
+        }
 
         if lastCommandTarget == .systemMedia {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
@@ -566,6 +888,25 @@ final class NowPlayingManager: ObservableObject {
         let state = (info["Player State"] as? String) ?? ""
         let playing = state.localizedCaseInsensitiveContains("playing")
         let name = (info["Name"] as? String) ?? ""
+
+        // Keep the per-player source row fresh even when this notification
+        // doesn't drive the main display.
+        if name.isEmpty {
+            playerSourceRows.removeValue(forKey: player.bundleIdentifier)
+        } else {
+            playerSourceRows[player.bundleIdentifier] = MediaSourceInfo(
+                id: player.bundleIdentifier,
+                displayName: player.displayName,
+                title: name,
+                isPlaying: playing
+            )
+            fetchPlayerRowArtwork(player, title: name)
+        }
+        rebuildAvailableSources()
+
+        let drivesDisplay = selectedSourceID == player.bundleIdentifier
+            || (selectedSourceID == nil && mediaBridge.isHealthy == false)
+        guard drivesDisplay else { return }
         let artist = (info["Artist"] as? String) ?? ""
         let album = (info["Album"] as? String) ?? ""
         let previousTrackKey = "\(title)|\(self.artist)|\(self.album)"
@@ -629,6 +970,18 @@ final class NowPlayingManager: ObservableObject {
     }
 
     private func refreshFromPreferredNowPlaying(allowZeroReset: Bool = false) {
+        guard displayFollowsBridge == false else { return }
+
+        if let selectedSourceID,
+           let player = PlayerApp.allCases.first(where: { $0.bundleIdentifier == selectedSourceID }) {
+            if player.isRunning, let state = readState(from: player), state.title.isEmpty == false {
+                lastKnownPlayer = player
+                lastCommandTarget = .player(player)
+                applyTrackState(state, sourceName: player.displayName, allowZeroReset: allowZeroReset)
+            }
+            return
+        }
+
         if applyBrowserNowPlaying(allowZeroReset: allowZeroReset) {
             return
         }
@@ -731,9 +1084,19 @@ final class NowPlayingManager: ObservableObject {
         if isPlaying {
             advanceLocalPosition()
         }
+
+        progressTickCount += 1
+        if selectedSourceID != nil, progressTickCount % 5 == 0 {
+            refreshPlaybackPosition(allowZeroReset: false)
+        }
+        if progressTickCount % 10 == 0, PlayerApp.allCases.contains(where: \.isRunning) {
+            refreshPlayerSourceRows()
+        }
     }
 
     private func refreshPlaybackPosition(allowZeroReset: Bool) {
+        guard displayFollowsBridge == false else { return }
+
         if case let .browser(browser) = lastCommandTarget {
             if browser.isRunning, let state = readBrowserState(from: browser) {
                 applyBrowserState(state, browser: browser, allowZeroReset: allowZeroReset)
@@ -801,6 +1164,17 @@ final class NowPlayingManager: ObservableObject {
     }
 
     private func sendCommand(_ command: String, fallbackMediaKey: MediaKey) {
+        if displayFollowsBridge {
+            let bridgeCommand: String
+            switch fallbackMediaKey {
+            case .playPause: bridgeCommand = "toggle"
+            case .next: bridgeCommand = "next"
+            case .previous: bridgeCommand = "previous"
+            }
+            mediaBridge.sendCommand(bridgeCommand)
+            return
+        }
+
         if case .browser = lastCommandTarget {
             postMediaKey(fallbackMediaKey)
 
@@ -836,6 +1210,13 @@ final class NowPlayingManager: ObservableObject {
     }
 
     private func runAppleScriptString(_ source: String) -> String? {
+        // executeAndReturnError pumps the runloop while waiting for Apple
+        // events, so timers/UI can re-enter this path. Nested NSAppleScript
+        // execution crashes inside the OSA component — skip instead.
+        guard isExecutingAppleScript == false else { return nil }
+        isExecutingAppleScript = true
+        defer { isExecutingAppleScript = false }
+
         var error: NSDictionary?
         guard let script = compiledAppleScript(for: source) else { return nil }
         let result = script.executeAndReturnError(&error)
@@ -843,6 +1224,10 @@ final class NowPlayingManager: ObservableObject {
     }
 
     private func runAppleScriptCommand(_ source: String) -> Bool {
+        guard isExecutingAppleScript == false else { return false }
+        isExecutingAppleScript = true
+        defer { isExecutingAppleScript = false }
+
         var error: NSDictionary?
         guard let script = compiledAppleScript(for: source) else { return false }
         script.executeAndReturnError(&error)

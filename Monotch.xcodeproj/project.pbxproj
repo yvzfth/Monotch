@@ -103,6 +103,7 @@
 				3D9C5D162F68A95400D34C9D /* Frameworks */,
 				3D9C5D172F68A95400D34C9D /* Resources */,
 				4F2A3B5C6D7E8F9012345678 /* Build Fan Helper */,
+				4F2A3B5C6D7E8F9012345679 /* Build Media Bridge */,
 			);
 			buildRules = (
 			);
@@ -269,6 +270,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -e\nHELPER_OUT=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/MonotchFanTool\"\nDAEMON_OUT=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchServices/MonotchFanDaemon\"\nDAEMON_PLIST_OUT=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/fatihyavuz.Monotch.FanDaemon.v4.plist\"\nmkdir -p \"$(dirname \"$HELPER_OUT\")\" \"$(dirname \"$DAEMON_OUT\")\" \"$(dirname \"$DAEMON_PLIST_OUT\")\"\nxcrun clang \"${SRCROOT}/Tools/MonotchFanTool/main.c\" -framework IOKit -framework CoreFoundation -o \"$HELPER_OUT\"\ncp \"$HELPER_OUT\" \"$DAEMON_OUT\"\ncp \"${SRCROOT}/Tools/MonotchFanTool/fatihyavuz.Monotch.FanDaemon.v4.plist\" \"$DAEMON_PLIST_OUT\"\nif [ \"${CODE_SIGNING_ALLOWED:-NO}\" = \"YES\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none \"$HELPER_OUT\"\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none \"$DAEMON_OUT\"\nfi\n";
+		};
+		4F2A3B5C6D7E8F9012345679 /* Build Media Bridge */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Tools/MonotchMediaBridge/MonotchMediaBridge.m",
+			);
+			name = "Build Media Bridge";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/MonotchMediaBridge.dylib",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nBRIDGE_OUT=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/MonotchMediaBridge.dylib\"\nmkdir -p \"$(dirname \"$BRIDGE_OUT\")\"\nxcrun clang -dynamiclib -fobjc-arc \"${SRCROOT}/Tools/MonotchMediaBridge/MonotchMediaBridge.m\" -framework Foundation -framework AppKit -o \"$BRIDGE_OUT\"\nif [ \"${CODE_SIGNING_ALLOWED:-NO}\" = \"YES\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none \"$BRIDGE_OUT\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
