@@ -7,6 +7,7 @@ struct FileShelfView: View {
     var onRemove: (() -> Void)?
     @State private var isTargeted = false
     @State private var copiedItemID: UUID?
+    @State private var isConfirmingClear = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -16,20 +17,36 @@ struct FileShelfView: View {
                     .foregroundColor(.white.opacity(0.58))
                 Spacer()
                 if !items.isEmpty {
-                    Button {
-                        items.removeAll()
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.72))
+                    if isConfirmingClear {
+                        inlineConfirmPill(
+                            message: String(localized: "Clear items?", comment: "Inline confirmation to clear all items from a tray."),
+                            onConfirm: {
+                                withAnimation(.easeOut(duration: 0.16)) { isConfirmingClear = false }
+                                items.removeAll()
+                            },
+                            onCancel: {
+                                withAnimation(.easeOut(duration: 0.16)) { isConfirmingClear = false }
+                            }
+                        )
+                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
+                    } else {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.16)) { isConfirmingClear = true }
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.72))
+                        }
+                        .buttonStyle(.borderless)
+                        .help(String(localized: "Clear items", comment: "Tooltip for the button that clears all items from the files tray."))
                     }
-                    .buttonStyle(.borderless)
                 }
 
                 if let onRemove {
                     ShelfRemoveButton(action: onRemove)
                 }
             }
+            .frame(height: 22)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -64,7 +81,6 @@ struct FileShelfView: View {
             .background(dropBackground)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .padding(.bottom, 10)
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             FileDropReceiver(isTargeted: $isTargeted) { urls in
@@ -190,16 +206,70 @@ struct FileShelfView: View {
 
 struct ShelfRemoveButton: View {
     var action: () -> Void
+    @State private var isConfirming = false
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.white.opacity(0.40))
+        if isConfirming {
+            inlineConfirmPill(
+                message: String(localized: "Remove tray?", comment: "Inline confirmation to remove a clipboard tray."),
+                onConfirm: {
+                    withAnimation(.easeOut(duration: 0.16)) { isConfirming = false }
+                    action()
+                },
+                onCancel: {
+                    withAnimation(.easeOut(duration: 0.16)) { isConfirming = false }
+                }
+            )
+            .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
+        } else {
+            Button {
+                withAnimation(.easeOut(duration: 0.16)) { isConfirming = true }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.40))
+            }
+            .buttonStyle(.borderless)
+            .help(String(localized: "Remove this tray", comment: "Tooltip for the button that hides a clipboard tray."))
+        }
+    }
+}
+
+func inlineConfirmPill(
+    message: String,
+    onConfirm: @escaping () -> Void,
+    onCancel: @escaping () -> Void
+) -> some View {
+    HStack(spacing: 4) {
+        Text(message)
+            .font(.system(size: 9, weight: .semibold, design: .rounded))
+            .foregroundColor(.white.opacity(0.80))
+            .lineLimit(1)
+
+        Button(action: onConfirm) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundColor(.black.opacity(0.85))
+                .frame(width: 16, height: 16)
+                .background(Color.red.opacity(0.90))
+                .clipShape(Circle())
         }
         .buttonStyle(.borderless)
-        .help(String(localized: "Remove this tray", comment: "Tooltip for the button that hides a clipboard tray."))
+
+        Button(action: onCancel) {
+            Image(systemName: "xmark")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundColor(.white.opacity(0.70))
+                .frame(width: 16, height: 16)
+                .background(Color.white.opacity(0.12))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.borderless)
     }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 3)
+    .background(Capsule().fill(Color.white.opacity(0.08)))
+    .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
 }
 
 struct FolderShelfView: View {
@@ -240,6 +310,7 @@ struct FolderShelfView: View {
                     ShelfRemoveButton(action: onRemove)
                 }
             }
+            .frame(height: 22)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -273,7 +344,6 @@ struct FolderShelfView: View {
             .background(folderBackground)
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .padding(.bottom, 10)
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 

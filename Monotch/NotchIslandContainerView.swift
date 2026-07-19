@@ -45,7 +45,8 @@ enum WidgetPage: Int, CaseIterable {
     var bottomInset: CGFloat {
         switch self {
         case .multimedia: return 10
-        case .clipboard, .system: return Self.tabBottomPadding
+        case .clipboard: return 10
+        case .system: return Self.tabBottomPadding
         case .camera: return 18
         }
     }
@@ -131,6 +132,7 @@ struct NotchIslandContainerView: View {
     @State private var pendingFanModeSelection: SystemMonitorManager.FanMode?
     @State private var fanModeWarningMessage: String?
     @State private var fanModeWarningToken = 0
+    @State private var isConfirmingClearHistory = false
     @Namespace private var fanModeSelectionNamespace
     @ObservedObject private var clipboard = ClipboardManager.shared
     @ObservedObject private var nowPlaying = NowPlayingManager.shared
@@ -1036,13 +1038,13 @@ struct NotchIslandContainerView: View {
                         .animation(.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.26), value: mediaInlinePanel)
 
                     HStack(spacing: 6) {
-                        mediaButton(systemName: "backward.fill") {
+                        mediaButton(systemName: "backward.fill", size: 24, fontSize: 10) {
                             nowPlaying.previousTrack()
                         }
                         mediaButton(systemName: nowPlaying.isPlaying ? "pause.fill" : "play.fill") {
                             nowPlaying.togglePlayPause()
                         }
-                        mediaButton(systemName: "forward.fill") {
+                        mediaButton(systemName: "forward.fill", size: 24, fontSize: 10) {
                             nowPlaying.nextTrack()
                         }
                     }
@@ -2106,19 +2108,35 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
                 Spacer()
 
                 if hasClipboardItems {
-                    Button {
-                        clipboard.recentTextItems.removeAll()
-                        clipboard.recentImageItems.removeAll()
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.72))
+                    if isConfirmingClearHistory {
+                        inlineConfirmPill(
+                            message: String(localized: "Clear items?", comment: "Inline confirmation to clear all items from a tray."),
+                            onConfirm: {
+                                withAnimation(.easeOut(duration: 0.16)) { isConfirmingClearHistory = false }
+                                clipboard.recentTextItems.removeAll()
+                                clipboard.recentImageItems.removeAll()
+                            },
+                            onCancel: {
+                                withAnimation(.easeOut(duration: 0.16)) { isConfirmingClearHistory = false }
+                            }
+                        )
+                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
+                    } else {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.16)) { isConfirmingClearHistory = true }
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.72))
+                        }
+                        .buttonStyle(.borderless)
+                        .help(String(localized: "Clear items", comment: "Tooltip for the button that clears all items from the clipboard history tray."))
                     }
-                    .buttonStyle(.borderless)
                 }
 
                 clipboardTrayRemoveButton(for: .history)
             }
+            .frame(height: 22)
 
             GeometryReader { proxy in
                 let spacing: CGFloat = 8
@@ -2899,12 +2917,12 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
         .buttonStyle(.plain)
     }
 
-    private func mediaButton(systemName: String, action: @escaping () -> Void) -> some View {
+    private func mediaButton(systemName: String, size: CGFloat = 30, fontSize: CGFloat = 12, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(size: fontSize, weight: .bold))
                 .foregroundColor(.white.opacity(0.92))
-                .frame(width: 30, height: 30)
+                .frame(width: size, height: size)
                 .background(Color.white.opacity(0.12))
                 .clipShape(Circle())
                 .overlay(
