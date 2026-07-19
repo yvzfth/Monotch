@@ -4,6 +4,7 @@ import AppKit
 struct FileShelfView: View {
     var title = "Files"
     @Binding var items: [ShelfItem]
+    var onRemove: (() -> Void)?
     @State private var isTargeted = false
     @State private var copiedItemID: UUID?
 
@@ -23,6 +24,10 @@ struct FileShelfView: View {
                             .foregroundColor(.white.opacity(0.72))
                     }
                     .buttonStyle(.borderless)
+                }
+
+                if let onRemove {
+                    ShelfRemoveButton(action: onRemove)
                 }
             }
 
@@ -183,11 +188,26 @@ struct FileShelfView: View {
     }
 }
 
+struct ShelfRemoveButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.white.opacity(0.40))
+        }
+        .buttonStyle(.borderless)
+        .help(String(localized: "Remove this tray", comment: "Tooltip for the button that hides a clipboard tray."))
+    }
+}
+
 struct FolderShelfView: View {
     var title: String
     var items: [ShelfItem]
     var onChooseFolder: () -> Void
     var onRefresh: () -> Void
+    var onRemove: (() -> Void)?
     @State private var copiedItemID: UUID?
 
     var body: some View {
@@ -215,6 +235,10 @@ struct FolderShelfView: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Choose folder")
+
+                if let onRemove {
+                    ShelfRemoveButton(action: onRemove)
+                }
             }
 
             ScrollView(.horizontal, showsIndicators: false) {

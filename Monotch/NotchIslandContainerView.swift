@@ -155,6 +155,12 @@ struct NotchIslandContainerView: View {
     @AppStorage(MonotchSettingsKey.previousTabShortcut) private var previousTabShortcut = MonotchShortcutKey.leftArrow.rawValue
     @AppStorage(MonotchSettingsKey.nextTabShortcut) private var nextTabShortcut = MonotchShortcutKey.rightArrow.rawValue
     @AppStorage(MonotchSettingsKey.toggleLyricsShortcut) private var toggleLyricsShortcut = MonotchShortcutKey.l.rawValue
+    @AppStorage(MonotchSettingsKey.mediaTabHintSeen) private var mediaTabHintSeen = false
+    @AppStorage(MonotchSettingsKey.clipboardTabHintSeen) private var clipboardTabHintSeen = false
+    @AppStorage(MonotchSettingsKey.systemTabHintSeen) private var systemTabHintSeen = false
+    @AppStorage(MonotchSettingsKey.cameraTabHintSeen) private var cameraTabHintSeen = false
+    @State private var activeHintPage: WidgetPage?
+    @State private var tabHintToken = 0
     private let outputVolumeSyncTimer = Timer.publish(every: 3.0, on: .main, in: .common).autoconnect()
 
     private var activePages: [WidgetPage] {
@@ -357,6 +363,7 @@ struct NotchIslandContainerView: View {
     private func updateVisiblePageWork() {
         let activePage = ui.isExpanded ? currentPage : nil
 
+        updateTabHint(for: activePage)
         system.setMonitoringActive(activePage == .system)
         clipboard.setFolderShelfMonitoringActive(activePage == .clipboard)
 
@@ -377,6 +384,98 @@ struct NotchIslandContainerView: View {
             resetCameraPreviewWarmup()
             withAnimation(.easeInOut(duration: 0.18)) {
                 isCameraOpening = false
+            }
+        }
+    }
+
+    private func tabHintSeen(_ page: WidgetPage) -> Bool {
+        switch page {
+        case .multimedia: return mediaTabHintSeen
+        case .clipboard: return clipboardTabHintSeen
+        case .system: return systemTabHintSeen
+        case .camera: return cameraTabHintSeen
+        }
+    }
+
+    private func markTabHintSeen(_ page: WidgetPage) {
+        switch page {
+        case .multimedia: mediaTabHintSeen = true
+        case .clipboard: clipboardTabHintSeen = true
+        case .system: systemTabHintSeen = true
+        case .camera: cameraTabHintSeen = true
+        }
+    }
+
+    private func updateTabHint(for page: WidgetPage?) {
+        tabHintToken += 1
+
+        guard let page, tabHintSeen(page) == false else {
+            if activeHintPage != nil {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    activeHintPage = nil
+                }
+            }
+            return
+        }
+
+        let token = tabHintToken
+
+        if activeHintPage != page {
+            withAnimation(.easeOut(duration: 0.24)) {
+                activeHintPage = page
+            }
+        }
+
+        // The hint counts as seen only after it stayed on screen long enough
+        // to be read; collapsing or switching tabs earlier shows it again.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 7.0) {
+            guard tabHintToken == token else { return }
+            markTabHintSeen(page)
+            withAnimation(.easeOut(duration: 0.35)) {
+                activeHintPage = nil
+            }
+        }
+    }
+
+    private func tabHintText(_ page: WidgetPage) -> String {
+        switch page {
+        case .multimedia:
+            let key = MonotchShortcutKey(rawValue: toggleLyricsShortcut) ?? .l
+            if key == .none {
+                return String(localized: "Click the quote button for live lyrics", comment: "First-use hint on the media tab when no lyrics shortcut key is set.")
+            }
+            return String(localized: "Press \(key.shortTitle) or click the quote button for live lyrics", comment: "First-use hint on the media tab. The placeholder is the lyrics shortcut key, e.g. 'L'.")
+        case .clipboard:
+            return String(localized: "Click an item to copy it • double-click to open it from the Files or Shelf tray", comment: "First-use hint on the clipboard tab.")
+        case .system:
+            return String(localized: "Click the CPU, RAM, or Storage card for details • try fan modes beyond Auto", comment: "First-use hint on the system tab.")
+        case .camera:
+            return String(localized: "Click a capture to copy it • double-click to open it • hold Space to record", comment: "First-use hint on the camera tab.")
+        }
+    }
+
+    private var tabHintOverlay: some View {
+        Group {
+            if let page = activeHintPage, page == currentPage {
+                HStack(spacing: 5) {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.system(size: 7.5, weight: .semibold))
+                        .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.42).opacity(0.85))
+
+                    Text(tabHintText(page))
+                        .font(.system(size: 8.2, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.72))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.60)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color.black.opacity(0.55)))
+                .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                .padding(.horizontal, 24)
+                .padding(.bottom, 2)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .allowsHitTesting(false)
             }
         }
     }
@@ -457,6 +556,9 @@ struct NotchIslandContainerView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .bottom) {
+            tabHintOverlay
+        }
     }
 
     private func syncExpandedHeight() {
@@ -475,7 +577,7 @@ struct NotchIslandContainerView: View {
     private static let systemStatRowHeight: CGFloat = 58
     private static let systemCardSpacing: CGFloat = 8
     private static let systemFansCardHeight: CGFloat = 134
-    private static let systemSensorsCardHeight: CGFloat = 84
+    private static let systemSensorsCardHeight: CGFloat = 94
     private static let systemDetailPanelHeight: CGFloat = systemDetailPanelFixedHeight
 
     private func expandedHeight(for page: WidgetPage) -> CGFloat {
@@ -493,6 +595,9 @@ struct NotchIslandContainerView: View {
 
     private var clipboardContentHeight: CGFloat {
         let count = CGFloat(visibleClipboardCards.count)
+        // With every tray removed, the page keeps one card-height for the
+        // "add a tray" placeholder.
+        guard count > 0 else { return Self.clipboardCardHeight }
         return count * Self.clipboardCardHeight + max(0, count - 1) * Self.clipboardCardSpacing
     }
 
@@ -747,11 +852,22 @@ struct NotchIslandContainerView: View {
     }
 
     private func hideClipboardCard(_ card: MonotchClipboardCard) {
-        guard visibleClipboardCards.count > 1 else { return }
-        switch card {
-        case .history: showClipboardHistoryCard = false
-        case .files: showClipboardFilesCard = false
-        case .downloads: showClipboardDownloadsCard = false
+        withAnimation(.snappy(duration: 0.24, extraBounce: 0.02)) {
+            switch card {
+            case .history: showClipboardHistoryCard = false
+            case .files: showClipboardFilesCard = false
+            case .downloads: showClipboardDownloadsCard = false
+            }
+        }
+    }
+
+    private func showClipboardCard(_ card: MonotchClipboardCard) {
+        withAnimation(.snappy(duration: 0.24, extraBounce: 0.02)) {
+            switch card {
+            case .history: showClipboardHistoryCard = true
+            case .files: showClipboardFilesCard = true
+            case .downloads: showClipboardDownloadsCard = true
+            }
         }
     }
 
@@ -1403,9 +1519,14 @@ private var fanControlPanel: some View {
             Group {
                 switch card {
                 case .fans:
+                    // Pinned so the rendered height always matches the budget
+                    // used by systemContentHeight; otherwise the card grows
+                    // into the bottom inset and the padding looks uneven.
                     fanControlsCard
+                        .frame(height: Self.systemFansCardHeight)
                 case .sensors:
                     fanSensorsCard
+                        .frame(height: Self.systemSensorsCardHeight)
                 case .cpu, .ram, .storage:
                     EmptyView()
                 }
@@ -1462,6 +1583,7 @@ private var fanControlsCard: some View {
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 10)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color.white.opacity(0.05))
     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     .overlay(
@@ -1505,6 +1627,7 @@ private var fanSensorsCard: some View {
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 10)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color.white.opacity(0.05))
     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     .overlay(
@@ -1860,17 +1983,65 @@ private var fanSensorsCard: some View {
 
 private var clipboardPage: some View {
     VStack(alignment: .leading, spacing: 8) {
-        ForEach(visibleClipboardCards, id: \.self) { card in
-            clipboardCardView(card)
-                .contextMenu {
-                    Button("Hide \(card.title) Card") {
-                        hideClipboardCard(card)
+        if visibleClipboardCards.isEmpty {
+            clipboardEmptyTraysCard
+        } else {
+            ForEach(visibleClipboardCards, id: \.self) { card in
+                clipboardCardView(card)
+                    .contextMenu {
+                        Button("Hide \(card.title) Card") {
+                            hideClipboardCard(card)
+                        }
                     }
-                    .disabled(visibleClipboardCards.count == 1)
-                }
+            }
         }
     }
     .frame(height: clipboardPageHeight, alignment: .top)
+}
+
+private var clipboardEmptyTraysCard: some View {
+    VStack(spacing: 10) {
+        Text("No trays here — add one to get started")
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .foregroundColor(.white.opacity(0.55))
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+
+        HStack(spacing: 6) {
+            ForEach(MonotchClipboardCard.ordered(from: clipboardCardOrderRaw)) { card in
+                clipboardAddTrayButton(card)
+            }
+        }
+    }
+    .frame(maxWidth: .infinity, minHeight: Self.clipboardCardHeight)
+    .background(clipboardTrayBackground)
+}
+
+private func clipboardAddTrayButton(_ card: MonotchClipboardCard) -> some View {
+    Button {
+        showClipboardCard(card)
+    } label: {
+        HStack(spacing: 4) {
+            Image(systemName: "plus")
+                .font(.system(size: 7.5, weight: .bold))
+            Text(card.title)
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+        }
+        .foregroundColor(.white.opacity(0.80))
+        .padding(.horizontal, 10)
+        .frame(height: 22)
+        .background(Capsule().fill(Color.white.opacity(0.08)))
+        .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
+    }
+    .buttonStyle(.plain)
+    .help(String(localized: "Add the \(card.title) tray", comment: "Tooltip for a button that re-adds a hidden clipboard tray. The placeholder is the tray name."))
+}
+
+private func clipboardTrayRemoveButton(for card: MonotchClipboardCard) -> some View {
+    ShelfRemoveButton {
+        hideClipboardCard(card)
+    }
 }
 
 @ViewBuilder
@@ -1884,7 +2055,10 @@ private func clipboardCardView(_ card: MonotchClipboardCard) -> some View {
             items: Binding(
                 get: { clipboard.recentFileItems },
                 set: { clipboard.recentFileItems = $0 }
-            )
+            ),
+            onRemove: {
+                hideClipboardCard(.files)
+            }
         )
     case .downloads:
         FolderShelfView(
@@ -1897,21 +2071,22 @@ private func clipboardCardView(_ card: MonotchClipboardCard) -> some View {
             },
             onRefresh: {
                 clipboard.refreshFolderShelf()
+            },
+            onRemove: {
+                hideClipboardCard(.downloads)
             }
         )
     }
 }
 
 private var visibleClipboardCards: [MonotchClipboardCard] {
-    let cards = MonotchClipboardCard.ordered(from: clipboardCardOrderRaw).filter { card in
+    MonotchClipboardCard.ordered(from: clipboardCardOrderRaw).filter { card in
         switch card {
         case .history: return showClipboardHistoryCard
         case .files: return showClipboardFilesCard
         case .downloads: return showClipboardDownloadsCard
         }
     }
-
-    return cards.isEmpty ? [.history] : cards
 }
 
     private var clipboardPageHeight: CGFloat {
@@ -1941,6 +2116,8 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
                     }
                     .buttonStyle(.borderless)
                 }
+
+                clipboardTrayRemoveButton(for: .history)
             }
 
             GeometryReader { proxy in

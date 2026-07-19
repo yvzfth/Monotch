@@ -22,6 +22,10 @@ enum MonotchSettingsKey {
     static let previousTabShortcut = "previousTabShortcut"
     static let nextTabShortcut = "nextTabShortcut"
     static let toggleLyricsShortcut = "toggleLyricsShortcut"
+    static let mediaTabHintSeen = "mediaTabHintSeen"
+    static let clipboardTabHintSeen = "clipboardTabHintSeen"
+    static let systemTabHintSeen = "systemTabHintSeen"
+    static let cameraTabHintSeen = "cameraTabHintSeen"
 }
 
 enum MonotchTabItem: String, CaseIterable, Identifiable {

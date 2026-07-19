@@ -386,13 +386,13 @@ struct SettingsView: View {
         )
     }
 
+    // Clipboard trays may all be hidden; the tab then shows an "add a tray"
+    // placeholder instead of forcing one card to stay on.
     private func clipboardCardVisibilityBinding(_ source: Binding<Bool>) -> Binding<Bool> {
         Binding(
             get: { source.wrappedValue },
             set: { newValue in
-                if newValue || enabledClipboardCardCount > 1 {
-                    source.wrappedValue = newValue
-                }
+                source.wrappedValue = newValue
             }
         )
     }
@@ -410,10 +410,6 @@ struct SettingsView: View {
 
     private var enabledTabCount: Int {
         [showMediaTab, showClipboardTab, showSystemTab, showCameraTab].filter { $0 }.count
-    }
-
-    private var enabledClipboardCardCount: Int {
-        [showClipboardHistoryCard, showClipboardFilesCard, showClipboardDownloadsCard].filter { $0 }.count
     }
 
     private var enabledSystemCardCount: Int {
