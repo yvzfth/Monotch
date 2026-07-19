@@ -585,8 +585,8 @@ struct NotchIslandContainerView: View {
 
     private var cameraPreviewSize: CGSize {
         isCameraPreviewExpanded
-            ? CGSize(width: 220, height: 124)
-            : CGSize(width: 124, height: 124)
+            ? CGSize(width: 170, height: 96)
+            : CGSize(width: 96, height: 96)
     }
 
     private var cameraCaptureAspectRatio: CGFloat {
@@ -595,7 +595,7 @@ struct NotchIslandContainerView: View {
     }
 
     private var cameraPreviewCornerRadius: CGFloat {
-        isCameraPreviewExpanded ? 24 : 30
+        isCameraPreviewExpanded ? 20 : 24
     }
 
     private var cameraUtilityButtonSize: CGFloat {
@@ -623,7 +623,7 @@ struct NotchIslandContainerView: View {
     }
 
     private var cameraContentHeight: CGFloat {
-        cameraPreviewRowHeight + 8 + 46
+        cameraPreviewRowHeight
     }
 
     private var cameraExpandedHeight: CGFloat {
@@ -2209,17 +2209,19 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
         let previewSize = cameraPreviewSize
         let previewCornerRadius = cameraPreviewCornerRadius
 
-        return VStack(spacing: 8) {
+        return ZStack {
             HStack(spacing: cameraSideControlGap) {
                 cameraUtilityStack
                 cameraPreviewSurface(size: previewSize, cornerRadius: previewCornerRadius)
                 cameraCaptureStack
             }
-            .frame(height: cameraPreviewRowHeight)
             .frame(maxWidth: .infinity, alignment: .center)
+
             cameraCaptureTray
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(height: cameraPreviewRowHeight)
+        .frame(maxWidth: .infinity)
         .background(
             CameraSpaceShortcutView(manager: camera, aspectRatio: cameraCaptureAspectRatio)
                 .frame(width: 0, height: 0)
@@ -2448,15 +2450,8 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
     }
 
     private var cameraCaptureTray: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
-                ForEach(camera.captures) { item in
-                    cameraCaptureItemView(item)
-                        .onDrag {
-                            NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
-                        }
-                }
-
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 7) {
                 if camera.captures.isEmpty {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color.white.opacity(0.08))
@@ -2467,12 +2462,19 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
                         )
                         .frame(width: 34, height: 34)
                 }
+
+                ForEach(Array(camera.captures.reversed())) { item in
+                    cameraCaptureItemView(item)
+                        .onDrag {
+                            NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
+                        }
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: cameraPreviewRowHeight - 12, alignment: .bottom)
             .padding(6)
         }
-        .frame(height: 46)
-        .frame(maxWidth: .infinity)
+        .defaultScrollAnchor(.bottom)
+        .frame(width: 46, height: cameraPreviewRowHeight)
         .background(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .fill(Color.white.opacity(0.055))
