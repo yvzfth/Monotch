@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MonotchCommands: Commands {
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
@@ -26,6 +27,10 @@ struct MonotchCommands: Commands {
                 MonotchCommandCenter.refreshFolderShelf()
             }
             .keyboardShortcut("r", modifiers: [.command])
+
+            Button("Reset Tray Folder to Downloads") {
+                MonotchCommandCenter.resetFolderShelfLocation()
+            }
         }
 
         CommandGroup(after: .pasteboard) {
@@ -132,9 +137,22 @@ struct MonotchCommands: Commands {
 
         CommandGroup(replacing: .help) {
             Button("Monotch Help") {
-                MonotchCommandCenter.showHelp()
+                openWindow(id: "monotch-help")
+                NSApp.activate(ignoringOtherApps: true)
             }
             .keyboardShortcut("?", modifiers: [.command])
+
+            Button("Troubleshooting") {
+                openWindow(id: "monotch-help")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+
+            Button("Licensing & Credits") {
+                openWindow(id: "monotch-help")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+
+            Divider()
 
             Button("Show Shortcuts") {
                 openSettings()
@@ -214,6 +232,10 @@ enum MonotchCommandCenter {
         ClipboardManager.shared.refreshFolderShelf()
     }
 
+    static func resetFolderShelfLocation() {
+        ClipboardManager.shared.resetFolderShelfLocation()
+    }
+
     static func copyLatestText() {
         if ClipboardManager.shared.copyLatestTextToPasteboard() == false {
             NSSound.beep()
@@ -252,15 +274,6 @@ enum MonotchCommandCenter {
         }
 
         CameraCaptureManager.shared.clearCaptures()
-    }
-
-    static func showHelp() {
-        let alert = NSAlert()
-        alert.messageText = "Monotch Help"
-        alert.informativeText = "Use Command-1...4 to switch tabs and Command-Left/Right for previous or next tab. File and Edit menus expose tray folder, clipboard, and camera roll actions."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
     }
 
     private static func confirm(title: String, message: String) -> Bool {

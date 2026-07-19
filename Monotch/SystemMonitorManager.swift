@@ -54,6 +54,16 @@ final class SystemMonitorManager: ObservableObject {
         case balanced = "Balanced"
         case performance = "Performance"
         case maximum = "Max"
+
+        var title: String {
+            switch self {
+            case .automatic: return String(localized: "Auto", comment: "The automatic fan mode.")
+            case .silent: return String(localized: "Silent", comment: "The silent fan mode.")
+            case .balanced: return String(localized: "Balanced", comment: "The balanced fan mode.")
+            case .performance: return String(localized: "Performance", comment: "The performance fan mode.")
+            case .maximum: return String(localized: "Max", comment: "The maximum fan mode.")
+            }
+        }
     }
 
     @Published private(set) var cpuUsage: Double = 0
@@ -700,6 +710,8 @@ final class SystemMonitorManager: ObservableObject {
             }
         }
     }
+
+    static let modelLikelyHasFan: Bool = modelUsuallyHasFan
 
     private static var modelUsuallyHasFan: Bool {
         var size = 0

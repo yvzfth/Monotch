@@ -7,6 +7,29 @@ private final class NotchPanelWindow: NSWindow {
     override var canBecomeMain: Bool { false }
 }
 
+// The panel window is always sized to fit the fully expanded island (to avoid
+// the AppKit resize/constraints crash — see NotchWindowController.windowSize),
+// but most of that frame is empty margin for the shadow. Without this override
+// the transparent margin still swallows clicks meant for whatever is behind it
+// (other app windows, our own Settings/Help windows), because AppKit hit-tests
+// the window's full rectangle regardless of what's actually drawn there.
+private final class NotchHostingView: NSHostingView<NotchIslandContainerView> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let ui = NotchUIState.shared
+        let size = ui.isExpanded
+            ? CGSize(width: NotchIslandMetrics.expandedWidth, height: ui.expandedHeight)
+            : NotchIslandMetrics.collapsedSize
+
+        let originX = (bounds.width - size.width) / 2
+        let originY = bounds.height - size.height
+        let islandRect = NSRect(x: originX, y: originY, width: size.width, height: size.height)
+        let hitRect = islandRect.insetBy(dx: ui.isExpanded ? -2 : -8, dy: ui.isExpanded ? -2 : -6)
+
+        guard hitRect.contains(point) else { return nil }
+        return super.hitTest(point)
+    }
+}
+
 final class NotchWindowController {
     static let shared = NotchWindowController()
 
@@ -35,6 +58,14 @@ final class NotchWindowController {
                 } else {
                     self?.stopExpandedPointerWatchdog()
                 }
+                self?.updateClickThrough()
+            }
+            .store(in: &cancellables)
+
+        ui.$isInteractionHeld
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                self?.updateClickThrough()
             }
             .store(in: &cancellables)
 
@@ -49,6 +80,9 @@ final class NotchWindowController {
         stopExpandedPointerWatchdog()
         if let localMouseMonitor {
             NSEvent.removeMonitor(localMouseMonitor)
+        }
+        if let globalMouseMonitor {
+            NSEvent.removeMonitor(globalMouseMonitor)
         }
     }
 
@@ -155,7 +189,7 @@ final class NotchWindowController {
         window.hidesOnDeactivate = false
 
         let content = NotchIslandContainerView()
-        let hosting = NSHostingView(rootView: content)
+        let hosting = NotchHostingView(rootView: content)
         hosting.sizingOptions = []
         hosting.frame = window.contentView!.bounds
         hosting.autoresizingMask = [.width, .height]
@@ -163,6 +197,7 @@ final class NotchWindowController {
         window.makeFirstResponder(hosting)
 
         self.window = window
+        updateClickThrough()
     }
 
     private func startHoverMonitoring() {
@@ -170,16 +205,40 @@ final class NotchWindowController {
             self?.handlePointerMoved()
             return event
         }
+
+        // Always-on global monitor: the panel window is much larger than the
+        // visible island (margin for the shadow), and its low-alpha shadow
+        // pixels would otherwise swallow clicks meant for windows behind it.
+        // The window stays click-through except while the pointer is on the
+        // island, and since tracking areas don't fire on a window that
+        // ignores mouse events, this monitor is also what re-arms hover.
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.handlePointerMoved()
+            }
+        }
     }
 
     private func handlePointerMoved() {
         guard window?.isVisible == true else { return }
+
+        updateClickThrough()
+
         guard ui.isInteractionHeld == false else { return }
 
         if isPointerInsideNotch() {
             pointerEnteredNotch()
         } else if ui.isExpanded {
             pointerLeftNotch()
+        }
+    }
+
+    private func updateClickThrough() {
+        guard let window else { return }
+
+        let shouldIgnore = ui.isInteractionHeld == false && isPointerInsideNotch() == false
+        if window.ignoresMouseEvents != shouldIgnore {
+            window.ignoresMouseEvents = shouldIgnore
         }
     }
 
@@ -220,23 +279,11 @@ final class NotchWindowController {
 
         expandedPointerWatchdog = timer
         RunLoop.main.add(timer, forMode: .common)
-
-        if globalMouseMonitor == nil {
-            globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]) { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.handlePointerMoved()
-                }
-            }
-        }
     }
 
     private func stopExpandedPointerWatchdog() {
         expandedPointerWatchdog?.invalidate()
         expandedPointerWatchdog = nil
-        if let globalMouseMonitor {
-            NSEvent.removeMonitor(globalMouseMonitor)
-            self.globalMouseMonitor = nil
-        }
         pendingCollapse?.cancel()
     }
 

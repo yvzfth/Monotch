@@ -1,7 +1,14 @@
 import SwiftUI
+import AppKit
+import ServiceManagement
 
 struct SettingsView: View {
     @ObservedObject private var clipboard = ClipboardManager.shared
+    @AppStorage(MonotchSettingsKey.openOnHover) private var openOnHover = true
+    @AppStorage(MonotchSettingsKey.appLanguage) private var appLanguageRaw = AppLanguage.system.rawValue
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var launchAtLoginError: String?
+    @State private var showsRelaunchPrompt = false
 
     @AppStorage(MonotchSettingsKey.showMediaTab) private var showMediaTab = true
     @AppStorage(MonotchSettingsKey.showClipboardTab) private var showClipboardTab = true
@@ -26,10 +33,11 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                generalSection
                 tabSection
                 clipboardCardsSection
                 systemCardsSection
-                shelfSection
+                shortcutsSection
             }
             .padding(22)
         }
@@ -50,9 +58,149 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Monotch Settings")
                 .font(.system(size: 20, weight: .bold, design: .rounded))
-            Text("Choose tab order, visible cards, and the remaining keyboard shortcuts.")
+            Text("Choose how Monotch opens, tab order, visible cards, keyboard shortcuts, and the shelf folder.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var generalSection: some View {
+        settingsCard(title: "General") {
+            VStack(alignment: .leading, spacing: 8) {
+                settingRow {
+                    Toggle("Open when the pointer hovers the notch", isOn: $openOnHover)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+
+                settingRow {
+                    Toggle("Launch Monotch at login", isOn: $launchAtLogin)
+                        .font(.system(size: 12, weight: .semibold))
+                        .onChange(of: launchAtLogin) { _, enabled in
+                            updateLaunchAtLogin(enabled)
+                        }
+                }
+
+                if let launchAtLoginError {
+                    Text(launchAtLoginError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                settingRow {
+                    HStack {
+                        Text("Language")
+                            .font(.system(size: 12, weight: .semibold))
+                        Spacer()
+                        Picker("", selection: languageBinding) {
+                            ForEach(AppLanguage.allCases) { language in
+                                Text(language.title).tag(language.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 170)
+                    }
+                }
+
+                Text("With hover off, open Monotch from the menu bar commands or ⇧⌘N.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .alert("Restart Monotch to Apply Language", isPresented: $showsRelaunchPrompt) {
+            Button("Restart Now") { relaunchApp() }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text("Monotch needs to restart for the new language to take effect.")
+        }
+    }
+
+    private var languageBinding: Binding<String> {
+        Binding(
+            get: { appLanguageRaw },
+            set: { newValue in
+                guard newValue != appLanguageRaw else { return }
+                appLanguageRaw = newValue
+                applyLanguagePreference(newValue)
+                showsRelaunchPrompt = true
+            }
+        )
+    }
+
+    private func applyLanguagePreference(_ raw: String) {
+        if raw == AppLanguage.system.rawValue {
+            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+        } else {
+            UserDefaults.standard.set([raw], forKey: "AppleLanguages")
+        }
+    }
+
+    private func relaunchApp() {
+        let bundleURL = Bundle.main.bundleURL
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { _, _ in
+            DispatchQueue.main.async {
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
+    private var shortcutsSection: some View {
+        settingsCard(title: "Shortcuts") {
+            VStack(alignment: .leading, spacing: 8) {
+                shortcutRow(title: "Previous tab", selection: shortcutBinding($previousTabShortcut))
+                shortcutRow(title: "Next tab", selection: shortcutBinding($nextTabShortcut))
+                shortcutRow(title: "Toggle lyrics", selection: shortcutBinding($toggleLyricsShortcut))
+
+                Text("Shortcuts work while the notch is expanded. Picking a key already in use moves the old assignment to Off.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func shortcutRow(title: LocalizedStringKey, selection: Binding<String>) -> some View {
+        settingRow {
+            HStack {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Picker("", selection: selection) {
+                    ForEach(MonotchShortcutKey.allCases) { key in
+                        Text(key.title).tag(key.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 130)
+            }
+        }
+    }
+
+    private func shortcutBinding(_ source: Binding<String>) -> Binding<String> {
+        Binding(
+            get: { source.wrappedValue },
+            set: { newValue in
+                if newValue != MonotchShortcutKey.none.rawValue {
+                    if previousTabShortcut == newValue { previousTabShortcut = MonotchShortcutKey.none.rawValue }
+                    if nextTabShortcut == newValue { nextTabShortcut = MonotchShortcutKey.none.rawValue }
+                    if toggleLyricsShortcut == newValue { toggleLyricsShortcut = MonotchShortcutKey.none.rawValue }
+                }
+                source.wrappedValue = newValue
+            }
+        )
+    }
+
+    private func updateLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            launchAtLoginError = nil
+        } catch {
+            launchAtLogin = SMAppService.mainApp.status == .enabled
+            launchAtLoginError = "Couldn't update the login item: \(error.localizedDescription)"
         }
     }
 
@@ -77,7 +225,7 @@ struct SettingsView: View {
     }
 
     private var clipboardCardsSection: some View {
-        settingsCard(title: "Clipboard Cards") {
+        settingsCard(title: "Clipboard & Shelf Cards") {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(clipboardCards.enumerated()), id: \.element.id) { index, card in
                     reorderRow(
@@ -89,11 +237,47 @@ struct SettingsView: View {
                         onMoveDown: { moveClipboardCard(card, by: 1) }
                     )
                 }
-                Text("Turn cards off to remove them. Turn them back on to add them again.")
+
+                shelfFolderControls
+
+                Text("Turn cards off to remove them. The Shelf card follows the folder above — your Downloads folder unless you choose another.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var shelfFolderControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Shelf folder")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(clipboard.folderShelfURL.path)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+                Button("Choose...") { MonotchCommandCenter.chooseFolderShelfLocation() }
+                Button("Open") { MonotchCommandCenter.openFolderShelfLocation() }
+            }
+
+            HStack(spacing: 8) {
+                Button("Refresh shelf now") { MonotchCommandCenter.refreshFolderShelf() }
+                    .buttonStyle(.bordered)
+
+                if clipboard.isFolderShelfCustom {
+                    Button("Remove custom folder") { MonotchCommandCenter.resetFolderShelfLocation() }
+                        .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var systemCardsSection: some View {
@@ -116,27 +300,15 @@ struct SettingsView: View {
         }
     }
 
-    private var shelfSection: some View {
-        settingsCard(title: "Shelf") {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Downloads tray folder")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text(clipboard.folderShelfURL.path)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Spacer()
-                    Button("Choose...") { MonotchCommandCenter.chooseFolderShelfLocation() }
-                    Button("Open") { MonotchCommandCenter.openFolderShelfLocation() }
-                }
-                Button("Refresh shelf now") { MonotchCommandCenter.refreshFolderShelf() }
-                    .buttonStyle(.bordered)
-            }
+    private func settingRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 10) {
+            content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var tabItems: [MonotchTabItem] {
@@ -249,7 +421,7 @@ struct SettingsView: View {
     }
 
 
-    private func settingsCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func settingsCard<Content: View>(title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.system(size: 13, weight: .bold, design: .rounded))
@@ -299,11 +471,11 @@ struct SettingsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private func shortcutToolbarBadgeForRawValue(_ keyRawValue: String, _ title: String) -> some View {
+    private func shortcutToolbarBadgeForRawValue(_ keyRawValue: String, _ title: LocalizedStringKey) -> some View {
         shortcutToolbarBadge(MonotchShortcutKey.shortTitle(for: keyRawValue), title)
     }
 
-    private func shortcutToolbarBadge(_ key: String, _ title: String) -> some View {
+    private func shortcutToolbarBadge(_ key: String, _ title: LocalizedStringKey) -> some View {
         HStack(spacing: 4) {
             Text(key)
                 .font(.system(size: 10, weight: .bold, design: .rounded))

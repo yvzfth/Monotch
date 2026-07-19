@@ -94,6 +94,8 @@ struct NotchIslandContainerView: View {
     @State private var cameraRecordPressStartedRecording = false
     @State private var hoveredCameraCaptureID: UUID?
     @State private var isCameraOpening = false
+    @State private var cameraStallHintVisible = false
+    @State private var cameraStallToken = 0
     @State private var isCameraPreviewWarm = true
     @State private var cameraPreviewWarmToken = 0
     @State private var copiedTextItemID: UUID?
@@ -277,6 +279,14 @@ struct NotchIslandContainerView: View {
         .onChange(of: ui.pageRequest) { _, request in
             handlePageRequest(request)
         }
+        .onChange(of: currentExpandedHeight) { _, _ in
+            withAnimation(.snappy(duration: 0.24, extraBounce: 0.02)) {
+                syncExpandedHeight()
+            }
+        }
+        .onChange(of: isCameraOpening) { _, opening in
+            handleCameraOpeningChanged(opening)
+        }
         .onChange(of: hoveredSystemStat) { _, _ in
             guard currentPage == .system else { return }
             if hoveredSystemStat == .storage {
@@ -393,6 +403,24 @@ struct NotchIslandContainerView: View {
         }
     }
 
+    private func handleCameraOpeningChanged(_ opening: Bool) {
+        cameraStallToken += 1
+
+        if opening {
+            let token = cameraStallToken
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                guard cameraStallToken == token, isCameraOpening else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    cameraStallHintVisible = true
+                }
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.15)) {
+                cameraStallHintVisible = false
+            }
+        }
+    }
+
     private var notchShape: BottomRoundedRectangle {
         BottomRoundedRectangle(
             radius: ui.isExpanded ? 28 : 12,
@@ -442,12 +470,49 @@ struct NotchIslandContainerView: View {
         return expandedHeight(for: currentPage)
     }
 
+    private static let clipboardCardHeight: CGFloat = 92
+    private static let clipboardCardSpacing: CGFloat = 8
+    private static let systemStatRowHeight: CGFloat = 58
+    private static let systemCardSpacing: CGFloat = 8
+    private static let systemFansCardHeight: CGFloat = 134
+    private static let systemSensorsCardHeight: CGFloat = 84
+    private static let systemDetailContentHeight: CGFloat = 292
+
     private func expandedHeight(for page: WidgetPage) -> CGFloat {
-        if page == .camera {
+        switch page {
+        case .camera:
             return cameraExpandedHeight
+        case .clipboard:
+            return WidgetPage.clipboard.topInset + clipboardContentHeight + WidgetPage.clipboard.bottomInset
+        case .system:
+            return WidgetPage.system.topInset + systemContentHeight + WidgetPage.system.bottomInset
+        case .multimedia:
+            return page.expandedHeight
+        }
+    }
+
+    private var clipboardContentHeight: CGFloat {
+        let count = CGFloat(visibleClipboardCards.count)
+        return count * Self.clipboardCardHeight + max(0, count - 1) * Self.clipboardCardSpacing
+    }
+
+    private var systemContentHeight: CGFloat {
+        if hoveredSystemStat != nil { return Self.systemDetailContentHeight }
+
+        var blocks: [CGFloat] = []
+        if visibleSystemStatCards.isEmpty == false {
+            blocks.append(Self.systemStatRowHeight)
+        }
+        for card in visibleSystemUtilityCards {
+            switch card {
+            case .fans: blocks.append(Self.systemFansCardHeight)
+            case .sensors: blocks.append(Self.systemSensorsCardHeight)
+            case .cpu, .ram, .storage: break
+            }
         }
 
-        return page.expandedHeight
+        guard blocks.isEmpty == false else { return Self.systemStatRowHeight }
+        return blocks.reduce(0, +) + CGFloat(blocks.count - 1) * Self.systemCardSpacing
     }
 
     private func contentHeight(for page: WidgetPage) -> CGFloat {
@@ -505,13 +570,13 @@ struct NotchIslandContainerView: View {
     private func pageLoadingText(for page: WidgetPage) -> String {
         switch page {
         case .system:
-            return "Loading system data"
+            return String(localized: "Loading system data", comment: "Shown while system stats are loading.")
         case .camera:
-            return "Warming camera"
+            return String(localized: "Warming camera", comment: "Shown while the camera preview is warming up.")
         case .multimedia:
-            return "Loading media"
+            return String(localized: "Loading media", comment: "Shown while media info is loading.")
         case .clipboard:
-            return "Loading clipboard"
+            return String(localized: "Loading clipboard", comment: "Shown while clipboard data is loading.")
         }
     }
 
@@ -597,15 +662,23 @@ struct NotchIslandContainerView: View {
     }
 
     private var topIconBar: some View {
+        // With all 4 tabs enabled, the last tab in the user's order sits on the
+        // right edge; fewer tabs stay grouped on the left.
         HStack(spacing: 8) {
-            ForEach(activePages.filter { $0 != .camera }, id: \.self) { page in
-                pageIconButton(page: page)
-            }
+            if activePages.count == 4, let lastPage = activePages.last {
+                ForEach(activePages.dropLast(), id: \.self) { page in
+                    pageIconButton(page: page)
+                }
 
-            Spacer()
+                Spacer()
 
-            if activePages.contains(.camera) {
-                pageIconButton(page: .camera)
+                pageIconButton(page: lastPage)
+            } else {
+                ForEach(activePages, id: \.self) { page in
+                    pageIconButton(page: page)
+                }
+
+                Spacer()
             }
         }
         .padding(.top, 18)
@@ -642,6 +715,59 @@ struct NotchIslandContainerView: View {
                 )
         }
         .buttonStyle(.plain)
+        .help(pageTabItem(for: page).title)
+        .contextMenu {
+            Button("Hide \(pageTabItem(for: page).title) Tab") {
+                hideTab(page)
+            }
+            .disabled(activePages.count == 1)
+        }
+    }
+
+    private func pageTabItem(for page: WidgetPage) -> MonotchTabItem {
+        switch page {
+        case .multimedia: return .multimedia
+        case .clipboard: return .clipboard
+        case .system: return .system
+        case .camera: return .camera
+        }
+    }
+
+    private func hideTab(_ page: WidgetPage) {
+        guard activePages.count > 1 else { return }
+        switch page {
+        case .multimedia: showMediaTab = false
+        case .clipboard: showClipboardTab = false
+        case .system: showSystemTab = false
+        case .camera: showCameraTab = false
+        }
+    }
+
+    private func hideClipboardCard(_ card: MonotchClipboardCard) {
+        guard visibleClipboardCards.count > 1 else { return }
+        switch card {
+        case .history: showClipboardHistoryCard = false
+        case .files: showClipboardFilesCard = false
+        case .downloads: showClipboardDownloadsCard = false
+        }
+    }
+
+    private func hideSystemCard(_ card: MonotchSystemCard) {
+        guard visibleSystemStatCards.count + visibleSystemUtilityCards.count > 1 else { return }
+        switch card {
+        case .cpu: showSystemCPUCard = false
+        case .ram: showSystemRAMCard = false
+        case .storage: showSystemStorageCard = false
+        case .fans: showSystemFansCard = false
+        case .sensors: showSystemSensorsCard = false
+        }
+    }
+
+    private func systemCardRemoveButton(_ card: MonotchSystemCard) -> some View {
+        Button("Hide \(card.title) Card") {
+            hideSystemCard(card)
+        }
+        .disabled(visibleSystemStatCards.count + visibleSystemUtilityCards.count == 1)
     }
 
     private var collapsedNub: some View {
@@ -700,7 +826,7 @@ struct NotchIslandContainerView: View {
         switch currentPage {
         case .clipboard:
             let contentTop = WidgetPage.clipboard.topInset - 4
-            let contentBottom = WidgetPage.clipboard.topInset + 310
+            let contentBottom = WidgetPage.clipboard.topInset + clipboardContentHeight + 8
             return yFromTop >= contentTop && yFromTop <= contentBottom
 
         case .camera:
@@ -861,20 +987,41 @@ struct NotchIslandContainerView: View {
 
     @ViewBuilder
     private func systemStatTile(for card: MonotchSystemCard) -> some View {
-        switch card {
-        case .cpu:
-            systemStatTile(kind: .cpu, title: "CPU", usedText: percentText(system.cpuUsage), freeText: "\(percentText(system.cpuIdleUsage)) idle", progress: system.cpuUsage)
-        case .ram:
-            systemStatTile(kind: .memory, title: "RAM", usedText: memoryText(system.memoryUsed), freeText: "\(memoryText(system.memoryFree)) free", progress: system.memoryProgress)
-        case .storage:
-            systemStatTile(kind: .storage, title: "Storage", usedText: byteText(system.diskUsed), freeText: "\(byteText(system.diskFree)) free", progress: system.diskProgress)
-        case .fans, .sensors:
-            EmptyView()
+        Group {
+            switch card {
+            case .cpu:
+                systemStatTile(kind: .cpu, title: card.title, usedText: percentText(system.cpuUsage), freeText: idleSuffixText(percentText(system.cpuIdleUsage)), progress: system.cpuUsage)
+            case .ram:
+                systemStatTile(kind: .memory, title: card.title, usedText: memoryText(system.memoryUsed), freeText: freeSuffixText(memoryText(system.memoryFree)), progress: system.memoryProgress)
+            case .storage:
+                systemStatTile(kind: .storage, title: card.title, usedText: byteText(system.diskUsed), freeText: freeSuffixText(byteText(system.diskFree)), progress: system.diskProgress)
+            case .fans, .sensors:
+                EmptyView()
+            }
+        }
+        .contextMenu {
+            systemCardRemoveButton(card)
         }
     }
 
     private var systemPageHeight: CGFloat {
         contentHeight(for: .system)
+    }
+
+    private func usedSummaryText(_ value: String) -> String {
+        String(localized: "\(value) Used", comment: "An amount followed by the word Used, e.g. '40% Used'.")
+    }
+
+    private func idleSuffixText(_ value: String) -> String {
+        String(localized: "\(value) idle", comment: "A percentage followed by the word idle, e.g. '40% idle'.")
+    }
+
+    private func freeSuffixText(_ value: String) -> String {
+        String(localized: "\(value) free", comment: "An amount followed by the word free, e.g. '4 GB free'.")
+    }
+
+    private func freePrefixText(_ value: String) -> String {
+        String(localized: "Free \(value)", comment: "The word Free followed by an amount, e.g. 'Free 4 GB'.")
     }
 
     private func systemStatTile(kind: SystemStatKind, title: String, usedText: String, freeText: String, progress: Double) -> some View {
@@ -1018,7 +1165,10 @@ struct NotchIslandContainerView: View {
 
     private var cpuDetailPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            systemDetailHeader("CPU", summary: "\(precisePercentText(system.cpuUsage)) Used")
+            systemDetailHeader(
+                String(localized: "CPU", comment: "The CPU detail panel title."),
+                summary: usedSummaryText(precisePercentText(system.cpuUsage))
+            )
 
             stackedSystemBar([
                 (system.cpuSystemUsage, cpuSystemColor),
@@ -1027,16 +1177,16 @@ struct NotchIslandContainerView: View {
             ])
 
             HStack(spacing: 7) {
-                cpuUsagePill("System", value: precisePercentText(system.cpuSystemUsage), color: cpuSystemColor)
-                cpuUsagePill("User", value: precisePercentText(system.cpuUserUsage), color: cpuUserColor)
-                cpuUsagePill("Idle", value: precisePercentText(system.cpuIdleUsage), color: cpuIdleColor)
+                cpuUsagePill(String(localized: "System", comment: "System CPU usage."), value: precisePercentText(system.cpuSystemUsage), color: cpuSystemColor)
+                cpuUsagePill(String(localized: "User", comment: "User CPU usage."), value: precisePercentText(system.cpuUserUsage), color: cpuUserColor)
+                cpuUsagePill(String(localized: "Idle", comment: "Idle CPU usage."), value: precisePercentText(system.cpuIdleUsage), color: cpuIdleColor)
             }
 
             systemDetailDivider()
 
             HStack(spacing: 16) {
-                cpuBottomMetric("Threads", value: countText(system.threadCount))
-                cpuBottomMetric("Processes", value: countText(system.processCount))
+                cpuBottomMetric(String(localized: "Threads", comment: "The thread count metric."), value: countText(system.threadCount))
+                cpuBottomMetric(String(localized: "Processes", comment: "The process count metric."), value: countText(system.processCount))
             }
         }
         .systemDetailPanelStyle()
@@ -1064,21 +1214,24 @@ struct NotchIslandContainerView: View {
 
     private var memoryDetailPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            systemDetailHeader("RAM", summary: "\(memoryText(system.memoryUsed)) / \(memoryText(system.memoryTotal)) Used")
+            systemDetailHeader(
+                String(localized: "RAM", comment: "The RAM detail panel title."),
+                summary: usedSummaryText("\(memoryText(system.memoryUsed)) / \(memoryText(system.memoryTotal))")
+            )
 
             memoryStackedUsageBar
 
             HStack(spacing: 7) {
-                memoryUsagePill("App", value: memoryText(system.memoryApp), color: memoryAppColor)
-                memoryUsagePill("Wired", value: memoryText(system.memoryWired), color: memoryWiredColor)
-                memoryUsagePill("Compressed", value: memoryText(system.memoryCompressed), color: memoryCompressedColor)
+                memoryUsagePill(String(localized: "App", comment: "App memory usage."), value: memoryText(system.memoryApp), color: memoryAppColor)
+                memoryUsagePill(String(localized: "Wired", comment: "Wired memory usage."), value: memoryText(system.memoryWired), color: memoryWiredColor)
+                memoryUsagePill(String(localized: "Compressed", comment: "Compressed memory usage."), value: memoryText(system.memoryCompressed), color: memoryCompressedColor)
             }
 
             systemDetailDivider()
 
             HStack(spacing: 16) {
-                memoryBottomMetric("Cached", value: memoryText(system.memoryCached))
-                memoryBottomMetric("Swap", value: memoryText(system.memorySwapUsed))
+                memoryBottomMetric(String(localized: "Cached", comment: "Cached memory metric."), value: memoryText(system.memoryCached))
+                memoryBottomMetric(String(localized: "Swap", comment: "Swap memory metric."), value: memoryText(system.memorySwapUsed))
             }
         }
         .systemDetailPanelStyle()
@@ -1197,7 +1350,7 @@ struct NotchIslandContainerView: View {
             ]
 
             VStack(alignment: .leading, spacing: 8) {
-                systemDetailHeader("Macintosh HD", summary: "\(byteText(system.diskUsed)) / \(byteText(system.diskTotal)) Used")
+                systemDetailHeader("Macintosh HD", summary: usedSummaryText("\(byteText(system.diskUsed)) / \(byteText(system.diskTotal))"))
 
                 stackedSystemBar(storageSegments)
 
@@ -1206,7 +1359,7 @@ struct NotchIslandContainerView: View {
                         ForEach(storageCategories.prefix(5)) { category in
                             storageCategoryLegend(category)
                         }
-                        storageLegend("Free \(byteText(system.diskFree))", Color.white.opacity(0.40))
+                        storageLegend(freePrefixText(byteText(system.diskFree)), Color.white.opacity(0.40))
                     }
                 }
                 .frame(height: 24)
@@ -1214,8 +1367,8 @@ struct NotchIslandContainerView: View {
                 systemDetailDivider()
 
                 HStack(spacing: 16) {
-                    systemDetailBottomMetric("Used", value: byteText(system.diskUsed))
-                    systemDetailBottomMetric("Free", value: byteText(system.diskFree))
+                    systemDetailBottomMetric(String(localized: "Used", comment: "Storage used metric label."), value: byteText(system.diskUsed))
+                    systemDetailBottomMetric(String(localized: "Free", comment: "Storage free metric label."), value: byteText(system.diskFree))
                 }
             }
             .systemDetailPanelStyle()
@@ -1225,13 +1378,18 @@ struct NotchIslandContainerView: View {
 private var fanControlPanel: some View {
     VStack(alignment: .leading, spacing: 8) {
         ForEach(visibleSystemUtilityCards, id: \.self) { card in
-            switch card {
-            case .fans:
-                fanControlsCard
-            case .sensors:
-                fanSensorsCard
-            case .cpu, .ram, .storage:
-                EmptyView()
+            Group {
+                switch card {
+                case .fans:
+                    fanControlsCard
+                case .sensors:
+                    fanSensorsCard
+                case .cpu, .ram, .storage:
+                    EmptyView()
+                }
+            }
+            .contextMenu {
+                systemCardRemoveButton(card)
             }
         }
     }
@@ -1240,7 +1398,9 @@ private var fanControlPanel: some View {
 private var visibleSystemUtilityCards: [MonotchSystemCard] {
     MonotchSystemCard.ordered(from: systemCardOrderRaw).filter { card in
         switch card {
-        case .fans: return showSystemFansCard
+        case .fans:
+            // Fanless Macs (e.g. MacBook Air) hide fan controls automatically.
+            return showSystemFansCard && (system.fanAvailable || SystemMonitorManager.modelLikelyHasFan)
         case .sensors: return showSystemSensorsCard
         case .cpu, .ram, .storage: return false
         }
@@ -1269,7 +1429,9 @@ private var fanControlsCard: some View {
                 ForEach(Array(system.fanReadings.prefix(2).enumerated()), id: \.offset) { index, fan in
                     fanDetailCard(
                         fan,
-                        title: index == 0 ? "LEFT FAN" : "RIGHT FAN",
+                        title: index == 0
+                            ? String(localized: "LEFT FAN", comment: "The left fan label.")
+                            : String(localized: "RIGHT FAN", comment: "The right fan label."),
                         tint: index == 0 ? fanBlueColor : fanPurpleColor
                     )
                 }
@@ -1331,19 +1493,19 @@ private var fanSensorsCard: some View {
 
     private var fanModeSelector: some View {
         HStack(spacing: 2) {
-            fanModeSegment("Auto", isSelected: visibleFanMode == .automatic, isEnabled: fanControlButtonsEnabled) {
+            fanModeSegment(SystemMonitorManager.FanMode.automatic.title, isSelected: visibleFanMode == .automatic, isEnabled: fanControlButtonsEnabled) {
                 selectFanMode(.automatic)
             }
-            fanModeSegment("Silent", isSelected: visibleFanMode == .silent, isEnabled: fanControlButtonsEnabled) {
+            fanModeSegment(SystemMonitorManager.FanMode.silent.title, isSelected: visibleFanMode == .silent, isEnabled: fanControlButtonsEnabled) {
                 selectFanMode(.silent)
             }
-            fanModeSegment("Balanced", isSelected: visibleFanMode == .balanced, isEnabled: fanControlButtonsEnabled) {
+            fanModeSegment(SystemMonitorManager.FanMode.balanced.title, isSelected: visibleFanMode == .balanced, isEnabled: fanControlButtonsEnabled) {
                 selectFanMode(.balanced)
             }
-            fanModeSegment("Performance", isSelected: visibleFanMode == .performance, isEnabled: fanControlButtonsEnabled) {
+            fanModeSegment(SystemMonitorManager.FanMode.performance.title, isSelected: visibleFanMode == .performance, isEnabled: fanControlButtonsEnabled) {
                 selectFanMode(.performance)
             }
-            fanModeSegment("Max", isSelected: visibleFanMode == .maximum, isEnabled: fanControlButtonsEnabled) {
+            fanModeSegment(SystemMonitorManager.FanMode.maximum.title, isSelected: visibleFanMode == .maximum, isEnabled: fanControlButtonsEnabled) {
                 selectFanMode(.maximum)
             }
         }
@@ -1418,11 +1580,15 @@ private var fanSensorsCard: some View {
     private func showFanModeWarning(for mode: SystemMonitorManager.FanMode) {
         fanModeWarningToken += 1
         let token = fanModeWarningToken
-        let modeTitle = mode.rawValue
-        let cpuText = temperatureReading(for: .cpu).map { temperatureText($0.celsius) } ?? "hot"
+        let modeTitle = mode.title
+        let cpuText = temperatureReading(for: .cpu).map { temperatureText($0.celsius) }
+            ?? String(localized: "hot", comment: "Fallback CPU temperature description when a reading isn't available.")
 
         withAnimation(.easeOut(duration: 0.14)) {
-            fanModeWarningMessage = "\(modeTitle) blocked: CPU \(cpuText)"
+            fanModeWarningMessage = String(
+                localized: "\(modeTitle) blocked: CPU \(cpuText)",
+                comment: "A warning shown when a quiet fan mode is blocked because the CPU is too hot. First argument is the fan mode name, second is the CPU temperature."
+            )
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) {
@@ -1440,7 +1606,8 @@ private var fanSensorsCard: some View {
                 .foregroundColor(.white.opacity(isEnabled ? (isSelected ? 0.92 : 0.44) : 0.24))
                 .lineLimit(1)
                 .minimumScaleFactor(0.70)
-                .frame(width: fanModeSegmentWidth(title), height: 24)
+                .padding(.horizontal, 10)
+                .frame(minWidth: 42, minHeight: 24)
                 .background {
                     if isSelected && isEnabled {
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -1454,16 +1621,6 @@ private var fanSensorsCard: some View {
         .disabled(isEnabled == false)
     }
 
-    private func fanModeSegmentWidth(_ title: String) -> CGFloat {
-        switch title {
-        case "Balanced":
-            return 58
-        case "Performance":
-            return 72
-        default:
-            return 42
-        }
-    }
 
     private var fanControlButtonsEnabled: Bool {
         system.fanControlAvailable
@@ -1680,34 +1837,45 @@ private var fanSensorsCard: some View {
 private var clipboardPage: some View {
     VStack(alignment: .leading, spacing: 8) {
         ForEach(visibleClipboardCards, id: \.self) { card in
-            switch card {
-            case .history:
-                clipboardTextShelf
-            case .files:
-                FileShelfView(
-                    title: "Files",
-                    items: Binding(
-                        get: { clipboard.recentFileItems },
-                        set: { clipboard.recentFileItems = $0 }
-                    )
-                )
-            case .downloads:
-                FolderShelfView(
-                    title: clipboard.folderShelfTitle,
-                    items: clipboard.folderShelfItems,
-                    onChooseFolder: {
-                        ui.isInteractionHeld = true
-                        clipboard.chooseFolderShelfLocation()
-                        ui.isInteractionHeld = false
-                    },
-                    onRefresh: {
-                        clipboard.refreshFolderShelf()
+            clipboardCardView(card)
+                .contextMenu {
+                    Button("Hide \(card.title) Card") {
+                        hideClipboardCard(card)
                     }
-                )
-            }
+                    .disabled(visibleClipboardCards.count == 1)
+                }
         }
     }
     .frame(height: clipboardPageHeight, alignment: .top)
+}
+
+@ViewBuilder
+private func clipboardCardView(_ card: MonotchClipboardCard) -> some View {
+    switch card {
+    case .history:
+        clipboardTextShelf
+    case .files:
+        FileShelfView(
+            title: MonotchClipboardCard.files.title,
+            items: Binding(
+                get: { clipboard.recentFileItems },
+                set: { clipboard.recentFileItems = $0 }
+            )
+        )
+    case .downloads:
+        FolderShelfView(
+            title: clipboard.folderShelfTitle,
+            items: clipboard.folderShelfItems,
+            onChooseFolder: {
+                ui.isInteractionHeld = true
+                clipboard.chooseFolderShelfLocation()
+                ui.isInteractionHeld = false
+            },
+            onRefresh: {
+                clipboard.refreshFolderShelf()
+            }
+        )
+    }
 }
 
 private var visibleClipboardCards: [MonotchClipboardCard] {
@@ -1760,7 +1928,7 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: spacing) {
                         if hasClipboardItems == false {
-                            Text("Kopyalanan yazılar burada görünür")
+                            Text("Copied text appears here")
                                 .font(.caption2)
                                 .foregroundColor(.white.opacity(0.42))
                                 .frame(width: max(1, availableWidth - trayHorizontalInset * 2), height: 56, alignment: .leading)
@@ -1847,10 +2015,10 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
     private func clipboardDayTitle(for date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) {
-            return "Today"
+            return String(localized: "Today", comment: "The clipboard history date separator for today.")
         }
         if calendar.isDateInYesterday(date) {
-            return "Yesterday"
+            return String(localized: "Yesterday", comment: "The clipboard history date separator for yesterday.")
         }
 
         let formatter = DateFormatter()
@@ -1919,11 +2087,11 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
             NSItemProvider(object: item.text as NSString)
         }
         .contextMenu {
-            Button("Kopyala") {
+            Button("Copy") {
                 clipboard.copyTextToPasteboard(item)
                 showCopiedText(item.id)
             }
-            Button("Kaldır") {
+            Button("Remove") {
                 clipboard.recentTextItems.removeAll { $0.id == item.id }
             }
         }
@@ -1960,11 +2128,11 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
             NSItemProvider(item: item.data as NSData, typeIdentifier: item.typeIdentifier)
         }
         .contextMenu {
-            Button("Kopyala") {
+            Button("Copy") {
                 clipboard.copyImageToPasteboard(item)
                 showCopiedImage(item.id)
             }
-            Button("Kaldır") {
+            Button("Remove") {
                 clipboard.recentImageItems.removeAll { $0.id == item.id }
             }
         }
@@ -2064,11 +2232,21 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
             ZStack {
                 Color.black.opacity(0.78)
 
-                ShutterAnimationView()
-                    .frame(
-                        width: min(size.width, size.height) * 0.58,
-                        height: min(size.width, size.height) * 0.58
-                    )
+                if cameraStallHintVisible {
+                    Text("No image — the camera may be covered or the room is too dark.")
+                        .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.74))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 10)
+                        .transition(.opacity)
+                } else {
+                    ShutterAnimationView()
+                        .frame(
+                            width: min(size.width, size.height) * 0.58,
+                            height: min(size.width, size.height) * 0.58
+                        )
+                        .transition(.opacity)
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .transition(.opacity.combined(with: .scale(scale: 0.94)))
@@ -2372,7 +2550,7 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
         if #available(macOS 12.0, *) {
             AVCaptureDevice.showSystemUserInterface(.videoEffects)
         } else {
-            showMediaActionMessage("Video effects unavailable")
+            showMediaActionMessage(String(localized: "Video effects unavailable", comment: "Shown when camera video effects cannot be applied."))
         }
     }
 
@@ -2538,13 +2716,13 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
     private func mediaButtonHelp(for systemName: String) -> String {
         switch systemName {
         case "backward.fill":
-            return "Previous track"
+            return String(localized: "Previous track", comment: "Tooltip for the previous track button.")
         case "forward.fill":
-            return "Next track"
+            return String(localized: "Next track", comment: "Tooltip for the next track button.")
         case "pause.fill", "play.fill":
-            return "Play / pause"
+            return String(localized: "Play / pause", comment: "Tooltip for the play/pause button.")
         default:
-            return "Media control"
+            return String(localized: "Media control", comment: "Generic tooltip for a media control button.")
         }
     }
 
@@ -2775,7 +2953,7 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
         HStack(spacing: 5) {
             mediaActionButton(
                 systemName: "quote.bubble.fill",
-                help: "Show lyrics",
+                help: String(localized: "Show lyrics", comment: "Tooltip for the show lyrics button."),
                 isActive: mediaInlinePanel == .lyrics
             ) {
                 toggleMediaInlinePanel(.lyrics)
@@ -2789,7 +2967,7 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
     }
 
     private var mediaShareButton: some View {
-        mediaActionButton(systemName: "square.and.arrow.up", help: "Share song") {
+        mediaActionButton(systemName: "square.and.arrow.up", help: String(localized: "Share song", comment: "Tooltip for the share song button.")) {
             ui.isInteractionHeld = true
             pendingMediaSharePayload = MediaSharePayload(items: nowPlaying.currentTrackShareItems())
         }
@@ -2804,7 +2982,7 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
         let isExpanded = isOutputVolumeHovered || isOutputVolumeScrubbing
 
         HStack(spacing: 4) {
-            mediaActionButton(systemName: outputVolumeIconName, help: "Sound (M)") {
+            mediaActionButton(systemName: outputVolumeIconName, help: String(localized: "Sound (M)", comment: "Tooltip for the mute toggle button; M is the keyboard shortcut letter.")) {
                 toggleOutputMute()
             }
 
@@ -3429,53 +3607,53 @@ private extension SystemMonitorManager {
 
     var fanStatusText: String {
         if fanAvailable == false {
-            return "No hardware fan"
+            return String(localized: "No hardware fan", comment: "Fan status when the Mac has no hardware fan.")
         }
 
         if fanAccessDenied {
-            return "SMC fan keys locked"
+            return String(localized: "SMC fan keys locked", comment: "Fan status when SMC fan keys are locked.")
         }
 
         if fanHelperRequiresApproval {
-            return "Approve fan helper"
+            return String(localized: "Approve fan helper", comment: "Fan status prompting the user to approve the fan helper.")
         }
 
         if fanWriteAccessDenied {
-            return "Fan write blocked"
+            return String(localized: "Fan write blocked", comment: "Fan status when writing fan speed is blocked.")
         }
 
         if fanLastWriteFailed {
-            return "Fan write failed"
+            return String(localized: "Fan write failed", comment: "Fan status when the last fan speed write failed.")
         }
 
         if fanControlAvailable {
             switch fanMode {
             case .automatic:
-                return "Automatic"
+                return String(localized: "Automatic", comment: "Fan status for automatic mode.")
             case .silent:
-                return "Manual silent"
+                return String(localized: "Manual silent", comment: "Fan status for manual silent mode.")
             case .balanced:
-                return "Manual balanced"
+                return String(localized: "Manual balanced", comment: "Fan status for manual balanced mode.")
             case .performance:
-                return "Manual performance"
+                return String(localized: "Manual performance", comment: "Fan status for manual performance mode.")
             case .maximum:
-                return "Manual max"
+                return String(localized: "Manual max", comment: "Fan status for manual maximum mode.")
             }
         }
 
-        return "SMC fan keys unavailable"
+        return String(localized: "SMC fan keys unavailable", comment: "Fan status when SMC fan keys are unavailable.")
     }
 }
 
 private extension SystemMonitorManager.TemperatureReading.Kind {
     var temperatureTitle: String {
         switch self {
-        case .cpu: return "CPU"
-        case .gpu: return "GPU"
-        case .ssd: return "SSD"
-        case .battery: return "Battery"
-        case .memory: return "Memory Bank"
-        case .wifi: return "Wi-Fi"
+        case .cpu: return String(localized: "CPU", comment: "The CPU temperature sensor.")
+        case .gpu: return String(localized: "GPU", comment: "The GPU temperature sensor.")
+        case .ssd: return String(localized: "SSD", comment: "The SSD temperature sensor.")
+        case .battery: return String(localized: "Battery", comment: "The battery temperature sensor.")
+        case .memory: return String(localized: "Memory Bank", comment: "The memory bank temperature sensor.")
+        case .wifi: return String(localized: "Wi-Fi", comment: "The Wi-Fi temperature sensor.")
         }
     }
 }
@@ -3483,12 +3661,12 @@ private extension SystemMonitorManager.TemperatureReading.Kind {
 private extension SystemMonitorManager.StorageCategory.Kind {
     var storageTitle: String {
         switch self {
-        case .photos: return "Photos"
-        case .applications: return "Apps"
-        case .documents: return "Documents"
-        case .developer: return "Developer"
-        case .mail: return "Mail"
-        case .systemData: return "System Data"
+        case .photos: return String(localized: "Photos", comment: "The Photos storage category.")
+        case .applications: return String(localized: "Apps", comment: "The Apps storage category.")
+        case .documents: return String(localized: "Documents", comment: "The Documents storage category.")
+        case .developer: return String(localized: "Developer", comment: "The Developer storage category.")
+        case .mail: return String(localized: "Mail", comment: "The Mail storage category.")
+        case .systemData: return String(localized: "System Data", comment: "The System Data storage category.")
         }
     }
 

@@ -193,6 +193,19 @@
 			knownRegions = (
 				en,
 				Base,
+				tr,
+				de,
+				fr,
+				es,
+				"zh-Hans",
+				hi,
+				ru,
+				ar,
+				ko,
+				ja,
+				fa,
+				el,
+				uk,
 			);
 			mainGroup = 3D9C5D102F68A95400D34C9D;
 			minimizedProjectReferenceProxies = 1;
@@ -439,11 +452,14 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSAccessibilityUsageDescription = "Monotch needs Accessibility access to read Spotify queue items and press Spotify controls inside the notch.";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Monotch needs permission to control Music and Spotify playback from the notch.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Monotch needs camera access to show the camera preview inside the notch.";
 				INFOPLIST_KEY_NSCameraUseContinuityCameraDeviceType = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "Monotch shows recent files from your Downloads folder in the shelf tray.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Fatih Yavuz. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -480,11 +496,14 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSAccessibilityUsageDescription = "Monotch needs Accessibility access to read Spotify queue items and press Spotify controls inside the notch.";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Monotch needs permission to control Music and Spotify playback from the notch.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Monotch needs camera access to show the camera preview inside the notch.";
 				INFOPLIST_KEY_NSCameraUseContinuityCameraDeviceType = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "Monotch shows recent files from your Downloads folder in the shelf tray.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Fatih Yavuz. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

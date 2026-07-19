@@ -19,5 +19,10 @@ struct MonotchApp: App {
         .commands {
             MonotchCommands()
         }
+
+        Window("Monotch Help", id: "monotch-help") {
+            HelpView()
+        }
+        .windowResizability(.contentSize)
     }
 }

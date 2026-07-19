@@ -124,6 +124,14 @@ final class ClipboardManager: ObservableObject {
         folderShelfURL.lastPathComponent.isEmpty ? "Downloads" : folderShelfURL.lastPathComponent
     }
 
+    var isFolderShelfCustom: Bool {
+        folderShelfURL.standardizedFileURL != ClipboardManager.defaultFolderShelfURL.standardizedFileURL
+    }
+
+    func resetFolderShelfLocation() {
+        folderShelfURL = ClipboardManager.defaultFolderShelfURL
+    }
+
     func chooseFolderShelfLocation() {
         let panel = NSOpenPanel()
         panel.title = "Choose Folder"

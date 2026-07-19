@@ -39,12 +39,12 @@ struct FileShelfView: View {
                                 }
                             }
                             .contextMenu {
-                                Button("Finder'da Göster") {
+                                Button("Show in Finder") {
                                     item.withSecurityScopedAccess {
                                         NSWorkspace.shared.activateFileViewerSelecting([item.url])
                                     }
                                 }
-                                Button("Kaldır") {
+                                Button("Remove") {
                                     if let idx = items.firstIndex(of: item) {
                                         items.remove(at: idx)
                                     }
@@ -73,7 +73,7 @@ struct FileShelfView: View {
             Image(systemName: "arrow.down.doc")
                 .font(.system(size: 13, weight: .semibold))
 
-            Text("Dosyaları buraya sürükle")
+            Text("Drop files here")
                 .font(.caption2)
         }
         .foregroundColor(.white.opacity(0.46))
@@ -230,12 +230,12 @@ struct FolderShelfView: View {
                                     }
                                 }
                                 .contextMenu {
-                                    Button("Finder'da Göster") {
+                                    Button("Show in Finder") {
                                         item.withSecurityScopedAccess {
                                             NSWorkspace.shared.activateFileViewerSelecting([item.url])
                                         }
                                     }
-                                    Button("Kopyala") {
+                                    Button("Copy") {
                                         ClipboardManager.shared.copyFileToPasteboard(item)
                                         showCopied(item.id)
                                     }
@@ -258,7 +258,7 @@ struct FolderShelfView: View {
             Image(systemName: "folder")
                 .font(.system(size: 13, weight: .semibold))
 
-            Text("Klasörde dosya yok")
+            Text("No files in folder")
                 .font(.caption2)
         }
         .foregroundColor(.white.opacity(0.46))

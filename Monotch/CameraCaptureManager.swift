@@ -108,7 +108,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
                         self?.setPreviewError(nil)
                         self?.configureAndStart()
                     } else {
-                        self?.setPreviewError("Camera access denied")
+                        self?.setPreviewError(String(localized: "Camera access denied", comment: "Shown when camera permission is denied."))
                         self?.markPreviewUnavailable()
                         self?.previewLayer?.removeFromSuperlayer()
                         self?.previewLayer = nil
@@ -117,7 +117,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
             }
         default:
             permissionDenied = true
-            setPreviewError("Camera access denied")
+            setPreviewError(String(localized: "Camera access denied", comment: "Shown when camera permission is denied."))
             markPreviewUnavailable()
             previewLayer?.removeFromSuperlayer()
             previewLayer = nil
@@ -333,7 +333,7 @@ final class CameraCaptureManager: NSObject, ObservableObject {
         guard let device = preferredVideoDevice(),
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input) else {
-            setPreviewError("Camera unavailable")
+            setPreviewError(String(localized: "Camera unavailable", comment: "Shown when the camera cannot be opened."))
             return
         }
 
