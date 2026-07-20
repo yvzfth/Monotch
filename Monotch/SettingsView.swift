@@ -29,90 +29,308 @@ struct SettingsView: View {
     @AppStorage(MonotchSettingsKey.nextTabShortcut) private var nextTabShortcut = MonotchShortcutKey.rightArrow.rawValue
     @AppStorage(MonotchSettingsKey.toggleLyricsShortcut) private var toggleLyricsShortcut = MonotchShortcutKey.l.rawValue
 
+    private let paneWidth: CGFloat = 440
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                generalSection
-                tabSection
-                clipboardCardsSection
-                systemCardsSection
-                shortcutsSection
-            }
-            .padding(22)
+        TabView {
+            generalPane
+                .tabItem { Label(String(localized: "General", comment: "Settings tab."), systemImage: "gearshape") }
+            tabsPane
+                .tabItem { Label(String(localized: "Tabs", comment: "Settings tab."), systemImage: "square.grid.2x2") }
+            cardsPane
+                .tabItem { Label(String(localized: "Cards", comment: "Settings tab."), systemImage: "tray.full") }
+            shortcutsPane
+                .tabItem { Label(String(localized: "Shortcuts", comment: "Settings tab."), systemImage: "keyboard") }
         }
-        .frame(width: 580, height: 660)
-        .toolbar {
-            ToolbarItem {
-                HStack(spacing: 6) {
-                    shortcutToolbarBadge("Space", "Photo / hold video")
-                    shortcutToolbarBadge("\(MonotchShortcutKey.shortTitle(for: previousTabShortcut)) \(MonotchShortcutKey.shortTitle(for: nextTabShortcut))", "Tabs")
-                    shortcutToolbarBadgeForRawValue(toggleLyricsShortcut, "Lyrics")
-                }
-                .padding(.horizontal, 8)
-            }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Monotch Settings")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-            Text("Choose how Monotch opens, tab order, visible cards, keyboard shortcuts, and the shelf folder.")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var generalSection: some View {
-        settingsCard(title: "General") {
-            VStack(alignment: .leading, spacing: 8) {
-                settingRow {
-                    Toggle("Open when the pointer hovers the notch", isOn: $openOnHover)
-                        .font(.system(size: 12, weight: .semibold))
-                }
-
-                settingRow {
-                    Toggle("Launch Monotch at login", isOn: $launchAtLogin)
-                        .font(.system(size: 12, weight: .semibold))
-                        .onChange(of: launchAtLogin) { _, enabled in
-                            updateLaunchAtLogin(enabled)
-                        }
-                }
-
-                if let launchAtLoginError {
-                    Text(launchAtLoginError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-
-                settingRow {
-                    HStack {
-                        Text("Language")
-                            .font(.system(size: 12, weight: .semibold))
-                        Spacer()
-                        Picker("", selection: languageBinding) {
-                            ForEach(AppLanguage.allCases) { language in
-                                Text(language.title).tag(language.rawValue)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 170)
-                    }
-                }
-
-                Text("With hover off, open Monotch from the menu bar commands or ⇧⌘N.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .alert("Restart Monotch to Apply Language", isPresented: $showsRelaunchPrompt) {
-            Button("Restart Now") { relaunchApp() }
-            Button("Later", role: .cancel) {}
+        .frame(width: paneWidth)
+        .alert(String(localized: "Restart Monotch to Apply Language", comment: "Language restart alert title."), isPresented: $showsRelaunchPrompt) {
+            Button(String(localized: "Restart Now", comment: "Language restart alert confirm.")) { relaunchApp() }
+            Button(String(localized: "Later", comment: "Language restart alert dismiss."), role: .cancel) {}
         } message: {
             Text("Monotch needs to restart for the new language to take effect.")
         }
     }
+
+    // MARK: - General
+
+    private var generalPane: some View {
+        paneScroll {
+            VStack(alignment: .leading, spacing: 14) {
+                Toggle(String(localized: "Open when the pointer hovers the notch", comment: "General setting."), isOn: $openOnHover)
+                    .toggleStyle(.checkbox)
+
+                Toggle(String(localized: "Launch Monotch at login", comment: "General setting."), isOn: Binding(
+                    get: { launchAtLogin },
+                    set: { newValue in
+                        launchAtLogin = newValue
+                        updateLaunchAtLogin(newValue)
+                    }
+                ))
+                .toggleStyle(.checkbox)
+
+                if let launchAtLoginError {
+                    Text(launchAtLoginError)
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                        .padding(.leading, 20)
+                }
+
+                HStack {
+                    Text("Language")
+                    Spacer()
+                    Picker("", selection: languageBinding) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(language.title).tag(language.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 200)
+                }
+                .padding(.top, 6)
+
+                Text("With hover off, open Monotch from the menu-bar command or ⇧⌘N.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - Tabs
+
+    private var tabsPane: some View {
+        paneScroll {
+            VStack(alignment: .leading, spacing: 8) {
+                groupHeader(String(localized: "Notch tabs", comment: "Settings group header."))
+                listContainer {
+                    let items = tabItems
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        reorderRow(
+                            title: item.title,
+                            isOn: tabVisibilityBinding(for: item),
+                            index: index,
+                            count: items.count,
+                            onMoveUp: { moveTab(item, by: -1) },
+                            onMoveDown: { moveTab(item, by: 1) }
+                        )
+                    }
+                }
+                footnote(String(localized: "Turn a tab off to hide it. Drag the handle — or use the arrows — to reorder how tabs appear in the notch.", comment: "Tabs footnote."))
+            }
+        }
+    }
+
+    // MARK: - Cards
+
+    private var cardsPane: some View {
+        paneScroll {
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 8) {
+                    groupHeader(String(localized: "Clipboard & Shelf cards", comment: "Settings group header."))
+                    listContainer {
+                        let cards = clipboardCards
+                        ForEach(Array(cards.enumerated()), id: \.element.id) { index, cardItem in
+                            reorderRow(
+                                title: cardItem.title,
+                                isOn: clipboardCardVisibilityBinding(for: cardItem),
+                                index: index,
+                                count: cards.count,
+                                onMoveUp: { moveClipboardCard(cardItem, by: -1) },
+                                onMoveDown: { moveClipboardCard(cardItem, by: 1) }
+                            )
+                        }
+                        Divider()
+                        shelfFolderRow
+                    }
+                    footnote(String(localized: "The Shelf card mirrors the folder above — your Downloads folder unless you choose another.", comment: "Clipboard cards footnote."))
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    groupHeader(String(localized: "Fan & System cards", comment: "Settings group header."))
+                    listContainer {
+                        let cards = systemCards
+                        ForEach(Array(cards.enumerated()), id: \.element.id) { index, cardItem in
+                            reorderRow(
+                                title: cardItem.title,
+                                isOn: systemCardVisibilityBinding(for: cardItem),
+                                index: index,
+                                count: cards.count,
+                                onMoveUp: { moveSystemCard(cardItem, by: -1) },
+                                onMoveDown: { moveSystemCard(cardItem, by: 1) }
+                            )
+                        }
+                    }
+                    footnote(String(localized: "CPU, RAM, Storage, Fans and Sensors can be removed or added back at any time.", comment: "System cards footnote."))
+                }
+            }
+        }
+    }
+
+    private var shelfFolderRow: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Shelf folder")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(clipboard.folderShelfURL.path)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            Button(String(localized: "Choose…", comment: "Choose shelf folder.")) { MonotchCommandCenter.chooseFolderShelfLocation() }
+            Button(String(localized: "Open", comment: "Open shelf folder.")) { MonotchCommandCenter.openFolderShelfLocation() }
+            Button(String(localized: "Refresh", comment: "Refresh shelf folder.")) { MonotchCommandCenter.refreshFolderShelf() }
+            if clipboard.isFolderShelfCustom {
+                Button(String(localized: "Reset", comment: "Reset custom shelf folder.")) { MonotchCommandCenter.resetFolderShelfLocation() }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: - Shortcuts
+
+    private var shortcutsPane: some View {
+        paneScroll {
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 8) {
+                    groupHeader(String(localized: "While the notch is open", comment: "Shortcuts group header."))
+                    listContainer {
+                        kbdRow(keys: ["Space"], title: String(localized: "Take a photo · hold for video", comment: "Shortcut description."), showDivider: true)
+                        kbdRow(keys: ["←", "→"], title: String(localized: "Switch between tabs", comment: "Shortcut description."), showDivider: true)
+                        kbdRow(keys: ["⌘", "1", "–", "4"], title: String(localized: "Jump straight to a tab", comment: "Shortcut description."), showDivider: true)
+                        kbdRow(keys: [MonotchShortcutKey.shortTitle(for: toggleLyricsShortcut)], title: String(localized: "Toggle lyrics", comment: "Shortcut description."), showDivider: false)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    groupHeader(String(localized: "Customize keys", comment: "Shortcuts group header."))
+                    listContainer {
+                        keyRow(title: String(localized: "Previous tab", comment: "Shortcut row."), binding: shortcutBinding($previousTabShortcut), showDivider: true)
+                        keyRow(title: String(localized: "Next tab", comment: "Shortcut row."), binding: shortcutBinding($nextTabShortcut), showDivider: true)
+                        keyRow(title: String(localized: "Toggle lyrics", comment: "Shortcut row."), binding: shortcutBinding($toggleLyricsShortcut), showDivider: false)
+                    }
+                    footnote(String(localized: "Picking a key already in use moves the old assignment to Off.", comment: "Shortcuts footnote."))
+                }
+            }
+        }
+    }
+
+    private func keyRow(title: String, binding: Binding<String>, showDivider: Bool) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(title)
+                Spacer()
+                Picker("", selection: binding) {
+                    ForEach(MonotchShortcutKey.allCases) { key in
+                        Text(key.title).tag(key.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 140)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            if showDivider { Divider() }
+        }
+    }
+
+    private func kbdRow(keys: [String], title: String, showDivider: Bool) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+                    if key == "–" {
+                        Text("–").foregroundStyle(.secondary)
+                    } else {
+                        KbdCap(text: key)
+                    }
+                }
+                Text(title)
+                    .padding(.leading, 4)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            if showDivider { Divider() }
+        }
+    }
+
+    // MARK: - Reusable layout
+
+    private func paneScroll<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView {
+            content()
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(width: paneWidth)
+        .frame(minHeight: 260, maxHeight: 760)
+    }
+
+    private func groupHeader(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.leading, 2)
+    }
+
+    private func footnote(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 4)
+    }
+
+    private func listContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .textBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private func reorderRow(
+        title: String,
+        isOn: Binding<Bool>,
+        index: Int,
+        count: Int,
+        onMoveUp: @escaping () -> Void,
+        onMoveDown: @escaping () -> Void
+    ) -> some View {
+        let canUp = index > 0
+        let canDown = index < count - 1
+        return VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Toggle(title, isOn: isOn)
+                    .toggleStyle(.checkbox)
+                Spacer()
+                Button(action: { if canUp { onMoveUp() } }) {
+                    Image(systemName: "chevron.up").frame(width: 20, height: 20)
+                }
+                .buttonStyle(.borderless)
+                .disabled(!canUp)
+                Button(action: { if canDown { onMoveDown() } }) {
+                    Image(systemName: "chevron.down").frame(width: 20, height: 20)
+                }
+                .buttonStyle(.borderless)
+                .disabled(!canDown)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+
+            if index < count - 1 { Divider() }
+        }
+    }
+
+    // MARK: - Bindings & logic
 
     private var languageBinding: Binding<String> {
         Binding(
@@ -145,37 +363,6 @@ struct SettingsView: View {
         }
     }
 
-    private var shortcutsSection: some View {
-        settingsCard(title: "Shortcuts") {
-            VStack(alignment: .leading, spacing: 8) {
-                shortcutRow(title: "Previous tab", selection: shortcutBinding($previousTabShortcut))
-                shortcutRow(title: "Next tab", selection: shortcutBinding($nextTabShortcut))
-                shortcutRow(title: "Toggle lyrics", selection: shortcutBinding($toggleLyricsShortcut))
-
-                Text("Shortcuts work while the notch is expanded. Picking a key already in use moves the old assignment to Off.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func shortcutRow(title: LocalizedStringKey, selection: Binding<String>) -> some View {
-        settingRow {
-            HStack {
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                Spacer()
-                Picker("", selection: selection) {
-                    ForEach(MonotchShortcutKey.allCases) { key in
-                        Text(key.title).tag(key.rawValue)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 130)
-            }
-        }
-    }
-
     private func shortcutBinding(_ source: Binding<String>) -> Binding<String> {
         Binding(
             get: { source.wrappedValue },
@@ -204,124 +391,9 @@ struct SettingsView: View {
         }
     }
 
-    private var tabSection: some View {
-        settingsCard(title: "Tabs") {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(tabItems.enumerated()), id: \.element.id) { index, item in
-                    reorderRow(
-                        title: item.title,
-                        isOn: tabVisibilityBinding(for: item),
-                        canMoveUp: index > 0,
-                        canMoveDown: index < tabItems.count - 1,
-                        onMoveUp: { moveTab(item, by: -1) },
-                        onMoveDown: { moveTab(item, by: 1) }
-                    )
-                }
-                Text("Disable tabs to remove them from Monotch. Move rows to change their position in the notch.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var clipboardCardsSection: some View {
-        settingsCard(title: "Clipboard & Shelf Cards") {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(clipboardCards.enumerated()), id: \.element.id) { index, card in
-                    reorderRow(
-                        title: card.title,
-                        isOn: clipboardCardVisibilityBinding(for: card),
-                        canMoveUp: index > 0,
-                        canMoveDown: index < clipboardCards.count - 1,
-                        onMoveUp: { moveClipboardCard(card, by: -1) },
-                        onMoveDown: { moveClipboardCard(card, by: 1) }
-                    )
-                }
-
-                shelfFolderControls
-
-                Text("Turn cards off to remove them. The Shelf card follows the folder above — your Downloads folder unless you choose another.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var shelfFolderControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Shelf folder")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(clipboard.folderShelfURL.path)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Spacer()
-                Button("Choose...") { MonotchCommandCenter.chooseFolderShelfLocation() }
-                Button("Open") { MonotchCommandCenter.openFolderShelfLocation() }
-            }
-
-            HStack(spacing: 8) {
-                Button("Refresh shelf now") { MonotchCommandCenter.refreshFolderShelf() }
-                    .buttonStyle(.bordered)
-
-                if clipboard.isFolderShelfCustom {
-                    Button("Remove custom folder") { MonotchCommandCenter.resetFolderShelfLocation() }
-                        .buttonStyle(.bordered)
-                }
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
-        .background(Color.secondary.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private var systemCardsSection: some View {
-        settingsCard(title: "Fan/System Cards") {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(systemCards.enumerated()), id: \.element.id) { index, card in
-                    reorderRow(
-                        title: card.title,
-                        isOn: systemCardVisibilityBinding(for: card),
-                        canMoveUp: index > 0,
-                        canMoveDown: index < systemCards.count - 1,
-                        onMoveUp: { moveSystemCard(card, by: -1) },
-                        onMoveDown: { moveSystemCard(card, by: 1) }
-                    )
-                }
-                Text("CPU, RAM, Storage, Fans, and Sensors can be removed or added back from here.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func settingRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 10) {
-            content()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .background(Color.secondary.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private var tabItems: [MonotchTabItem] {
-        MonotchTabItem.ordered(from: tabOrderRaw)
-    }
-
-    private var clipboardCards: [MonotchClipboardCard] {
-        MonotchClipboardCard.ordered(from: clipboardCardOrderRaw)
-    }
-
-    private var systemCards: [MonotchSystemCard] {
-        MonotchSystemCard.ordered(from: systemCardOrderRaw)
-    }
+    private var tabItems: [MonotchTabItem] { MonotchTabItem.ordered(from: tabOrderRaw) }
+    private var clipboardCards: [MonotchClipboardCard] { MonotchClipboardCard.ordered(from: clipboardCardOrderRaw) }
+    private var systemCards: [MonotchSystemCard] { MonotchSystemCard.ordered(from: systemCardOrderRaw) }
 
     private func moveTab(_ item: MonotchTabItem, by offset: Int) {
         var items = tabItems
@@ -386,14 +458,10 @@ struct SettingsView: View {
         )
     }
 
-    // Clipboard trays may all be hidden; the tab then shows an "add a tray"
-    // placeholder instead of forcing one card to stay on.
     private func clipboardCardVisibilityBinding(_ source: Binding<Bool>) -> Binding<Bool> {
         Binding(
             get: { source.wrappedValue },
-            set: { newValue in
-                source.wrappedValue = newValue
-            }
+            set: { newValue in source.wrappedValue = newValue }
         )
     }
 
@@ -415,75 +483,26 @@ struct SettingsView: View {
     private var enabledSystemCardCount: Int {
         [showSystemCPUCard, showSystemRAMCard, showSystemStorageCard, showSystemFansCard, showSystemSensorsCard].filter { $0 }.count
     }
+}
 
+// MARK: - Keyboard cap
 
-    private func settingsCard<Content: View>(title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-            content()
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
-        )
-    }
+private struct KbdCap: View {
+    let text: String
 
-    private func reorderRow(
-        title: String,
-        isOn: Binding<Bool>,
-        canMoveUp: Bool,
-        canMoveDown: Bool,
-        onMoveUp: @escaping () -> Void,
-        onMoveDown: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 10) {
-            Toggle(title, isOn: isOn)
-                .font(.system(size: 12, weight: .semibold))
-
-            Spacer()
-
-            Button(action: onMoveUp) {
-                Image(systemName: "chevron.up")
-                    .frame(width: 18, height: 18)
-            }
-            .disabled(canMoveUp == false)
-
-            Button(action: onMoveDown) {
-                Image(systemName: "chevron.down")
-                    .frame(width: 18, height: 18)
-            }
-            .disabled(canMoveDown == false)
-        }
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .background(Color.secondary.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private func shortcutToolbarBadgeForRawValue(_ keyRawValue: String, _ title: LocalizedStringKey) -> some View {
-        shortcutToolbarBadge(MonotchShortcutKey.shortTitle(for: keyRawValue), title)
-    }
-
-    private func shortcutToolbarBadge(_ key: String, _ title: LocalizedStringKey) -> some View {
-        HStack(spacing: 4) {
-            Text(key)
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-
-            Text(title)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.secondary.opacity(0.12))
-        .clipShape(Capsule())
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12.5, weight: .semibold))
+            .frame(minWidth: 26)
+            .frame(height: 26)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(nsColor: .textBackgroundColor))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                    )
+            )
     }
 }

@@ -45,7 +45,7 @@ enum WidgetPage: Int, CaseIterable {
     var bottomInset: CGFloat {
         switch self {
         case .multimedia: return 10
-        case .clipboard: return 10
+        case .clipboard: return 18
         case .system: return Self.tabBottomPadding
         case .camera: return 18
         }
@@ -157,12 +157,9 @@ struct NotchIslandContainerView: View {
     @AppStorage(MonotchSettingsKey.previousTabShortcut) private var previousTabShortcut = MonotchShortcutKey.leftArrow.rawValue
     @AppStorage(MonotchSettingsKey.nextTabShortcut) private var nextTabShortcut = MonotchShortcutKey.rightArrow.rawValue
     @AppStorage(MonotchSettingsKey.toggleLyricsShortcut) private var toggleLyricsShortcut = MonotchShortcutKey.l.rawValue
-    @AppStorage(MonotchSettingsKey.mediaTabHintSeen) private var mediaTabHintSeen = false
-    @AppStorage(MonotchSettingsKey.clipboardTabHintSeen) private var clipboardTabHintSeen = false
-    @AppStorage(MonotchSettingsKey.systemTabHintSeen) private var systemTabHintSeen = false
-    @AppStorage(MonotchSettingsKey.cameraTabHintSeen) private var cameraTabHintSeen = false
     @State private var activeHintPage: WidgetPage?
     @State private var tabHintToken = 0
+    @State private var hintIndex = 0
     private let outputVolumeSyncTimer = Timer.publish(every: 3.0, on: .main, in: .common).autoconnect()
 
     private var activePages: [WidgetPage] {
@@ -239,12 +236,16 @@ struct NotchIslandContainerView: View {
         }
         .clipShape(notchShape)
         .background(
-            // Shadow lives on its own static shape layer so content redraws
+            // Shadow lives on its own shape layer so content redraws
             // (tab hovers, page transitions, collapse) never re-rasterize it.
+            // compositingGroup merges the two stacked shadows into a single
+            // layer so their overlap never shows a hard seam along the flat
+            // bottom edge when the view redraws on hover.
             notchShape
                 .fill(Color.black)
                 .shadow(color: .black.opacity(ui.isExpanded ? 0.52 : 0.30), radius: ui.isExpanded ? 12 : 6, y: ui.isExpanded ? 6 : 3)
                 .shadow(color: .black.opacity(ui.isExpanded ? 0.28 : 0.14), radius: ui.isExpanded ? 30 : 14, y: ui.isExpanded ? 16 : 8)
+                .compositingGroup()
         )
         .contentShape(notchShape)
         .environment(\.colorScheme, .dark)
@@ -271,6 +272,9 @@ struct NotchIslandContainerView: View {
         .onAppear {
             syncExpandedHeight()
             updateVisiblePageWork()
+            if ui.isExpanded {
+                presentTabHintIfNeeded()
+            }
         }
         .onChange(of: normalizedIndex) { _, _ in
             hoveredSystemStat = nil
@@ -280,9 +284,14 @@ struct NotchIslandContainerView: View {
             updateVisiblePageWork()
             syncExpandedHeight()
         }
-        .onChange(of: ui.isExpanded) { _, _ in
+        .onChange(of: ui.isExpanded) { _, expanded in
             updateVisiblePageWork()
             syncExpandedHeight()
+            if expanded {
+                presentTabHintIfNeeded()
+            } else {
+                hideTabHint()
+            }
         }
         .onChange(of: ui.pageRequest) { _, request in
             handlePageRequest(request)
@@ -365,7 +374,6 @@ struct NotchIslandContainerView: View {
     private func updateVisiblePageWork() {
         let activePage = ui.isExpanded ? currentPage : nil
 
-        updateTabHint(for: activePage)
         system.setMonitoringActive(activePage == .system)
         clipboard.setFolderShelfMonitoringActive(activePage == .clipboard)
 
@@ -390,94 +398,112 @@ struct NotchIslandContainerView: View {
         }
     }
 
-    private func tabHintSeen(_ page: WidgetPage) -> Bool {
-        switch page {
-        case .multimedia: return mediaTabHintSeen
-        case .clipboard: return clipboardTabHintSeen
-        case .system: return systemTabHintSeen
-        case .camera: return cameraTabHintSeen
-        }
-    }
+    // Hints only show when the notch opens, capped at a few times per app run
+    // (not on every tab switch). Tabs with more than one hint cycle through
+    // them one at a time, each shown long enough to be read.
+    private static var hintPresentationsThisRun = 0
+    private static let maxHintPresentationsPerRun = 5
 
-    private func markTabHintSeen(_ page: WidgetPage) {
-        switch page {
-        case .multimedia: mediaTabHintSeen = true
-        case .clipboard: clipboardTabHintSeen = true
-        case .system: systemTabHintSeen = true
-        case .camera: cameraTabHintSeen = true
-        }
-    }
+    private func presentTabHintIfNeeded() {
+        guard ui.isExpanded, let page = currentPage else { return }
+        guard Self.hintPresentationsThisRun < Self.maxHintPresentationsPerRun else { return }
+        guard tabHints(page).isEmpty == false else { return }
 
-    private func updateTabHint(for page: WidgetPage?) {
+        Self.hintPresentationsThisRun += 1
         tabHintToken += 1
-
-        guard let page, tabHintSeen(page) == false else {
-            if activeHintPage != nil {
-                withAnimation(.easeOut(duration: 0.18)) {
-                    activeHintPage = nil
-                }
-            }
-            return
-        }
-
-        let token = tabHintToken
-
+        hintIndex = 0
         if activeHintPage != page {
             withAnimation(.easeOut(duration: 0.24)) {
                 activeHintPage = page
             }
         }
 
-        // The hint counts as seen only after it stayed on screen long enough
-        // to be read; collapsing or switching tabs earlier shows it again.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 7.0) {
-            guard tabHintToken == token else { return }
-            markTabHintSeen(page)
-            withAnimation(.easeOut(duration: 0.35)) {
+        scheduleHintAdvance(for: page, token: tabHintToken)
+    }
+
+    private func hideTabHint() {
+        tabHintToken += 1
+        if activeHintPage != nil {
+            withAnimation(.easeOut(duration: 0.18)) {
                 activeHintPage = nil
             }
         }
     }
 
-    private func tabHintText(_ page: WidgetPage) -> String {
+    private func scheduleHintAdvance(for page: WidgetPage, token: Int) {
+        let count = tabHints(page).count
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            guard tabHintToken == token, activeHintPage == page else { return }
+
+            let next = hintIndex + 1
+            if next < count {
+                withAnimation(.easeOut(duration: 0.28)) {
+                    hintIndex = next
+                }
+                scheduleHintAdvance(for: page, token: token)
+            } else {
+                withAnimation(.easeOut(duration: 0.35)) {
+                    activeHintPage = nil
+                }
+            }
+        }
+    }
+
+    private func tabHints(_ page: WidgetPage) -> [String] {
         switch page {
         case .multimedia:
             let key = MonotchShortcutKey(rawValue: toggleLyricsShortcut) ?? .l
             if key == .none {
-                return String(localized: "Click the quote button for live lyrics", comment: "First-use hint on the media tab when no lyrics shortcut key is set.")
+                return [String(localized: "Click the quote button for live lyrics", comment: "Hint on the media tab when no lyrics shortcut key is set.")]
             }
-            return String(localized: "Press \(key.shortTitle) or click the quote button for live lyrics", comment: "First-use hint on the media tab. The placeholder is the lyrics shortcut key, e.g. 'L'.")
+            return [String(localized: "Press \(key.shortTitle) or click the quote button for live lyrics", comment: "Hint on the media tab. The placeholder is the lyrics shortcut key, e.g. 'L'.")]
         case .clipboard:
-            return String(localized: "Click an item to copy it • double-click to open it from the Files or Shelf tray", comment: "First-use hint on the clipboard tab.")
+            return [
+                String(localized: "Click an item to copy it", comment: "Hint on the clipboard tab."),
+                String(localized: "Double-click to open it from the Files or Shelf tray", comment: "Hint on the clipboard tab.")
+            ]
         case .system:
-            return String(localized: "Click the CPU, RAM, or Storage card for details • try fan modes beyond Auto", comment: "First-use hint on the system tab.")
+            return [
+                String(localized: "Click the CPU, RAM, or Storage card for details", comment: "Hint on the system tab."),
+                String(localized: "Try fan modes beyond Auto", comment: "Hint on the system tab.")
+            ]
         case .camera:
-            return String(localized: "Click a capture to copy it • double-click to open it • hold Space to record", comment: "First-use hint on the camera tab.")
+            return [
+                String(localized: "Click a capture to copy it", comment: "Hint on the camera tab."),
+                String(localized: "Double-click to open it", comment: "Hint on the camera tab."),
+                String(localized: "Hold Space to record", comment: "Hint on the camera tab.")
+            ]
         }
     }
 
     private var tabHintOverlay: some View {
         Group {
             if let page = activeHintPage, page == currentPage {
-                HStack(spacing: 5) {
-                    Image(systemName: "lightbulb.fill")
-                        .font(.system(size: 7.5, weight: .semibold))
-                        .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.42).opacity(0.85))
+                let hints = tabHints(page)
+                let index = min(hintIndex, hints.count - 1)
+                if hints.indices.contains(index) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.system(size: 7.5, weight: .semibold))
+                            .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.42).opacity(0.85))
 
-                    Text(tabHintText(page))
-                        .font(.system(size: 8.2, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.72))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.60)
+                        Text(hints[index])
+                            .font(.system(size: 8.2, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.72))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.60)
+                    }
+                    .id(index)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.black.opacity(0.55)))
+                    .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 2)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .allowsHitTesting(false)
                 }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 3)
-                .background(Capsule().fill(Color.black.opacity(0.55)))
-                .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
-                .padding(.horizontal, 24)
-                .padding(.bottom, 2)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                .allowsHitTesting(false)
             }
         }
     }
@@ -574,7 +600,8 @@ struct NotchIslandContainerView: View {
         return expandedHeight(for: currentPage)
     }
 
-    private static let clipboardCardHeight: CGFloat = 92
+    private static let cameraTrayBottomAnchor = "cameraTrayBottomAnchor"
+    private static let clipboardCardHeight: CGFloat = 98
     private static let clipboardCardSpacing: CGFloat = 8
     private static let systemStatRowHeight: CGFloat = 58
     private static let systemCardSpacing: CGFloat = 8
@@ -2645,30 +2672,42 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
     }
 
     private var cameraCaptureTray: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 7) {
-                if camera.captures.isEmpty {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                        .overlay(
-                            Image(systemName: "photo.on.rectangle")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.40))
-                        )
-                        .frame(width: 34, height: 34)
-                }
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 7) {
+                    if camera.captures.isEmpty {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Image(systemName: "photo.on.rectangle")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.40))
+                            )
+                            .frame(width: 34, height: 34)
+                    }
 
-                ForEach(Array(camera.captures.reversed())) { item in
-                    cameraCaptureItemView(item)
-                        .onDrag {
-                            NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
-                        }
+                    ForEach(Array(camera.captures.reversed())) { item in
+                        cameraCaptureItemView(item)
+                            .onDrag {
+                                NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
+                            }
+                    }
+
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .id(Self.cameraTrayBottomAnchor)
+                }
+                .frame(minHeight: cameraPreviewRowHeight - 12, alignment: .bottom)
+                .padding(6)
+            }
+            .defaultScrollAnchor(.bottom)
+            .onChange(of: camera.captures.first?.id) { _, newestID in
+                guard newestID != nil else { return }
+                withAnimation(.easeOut(duration: 0.28)) {
+                    proxy.scrollTo(Self.cameraTrayBottomAnchor, anchor: .bottom)
                 }
             }
-            .frame(minHeight: cameraPreviewRowHeight - 12, alignment: .bottom)
-            .padding(6)
         }
-        .defaultScrollAnchor(.bottom)
         .frame(width: 46, height: cameraPreviewRowHeight)
         .background(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
@@ -2978,10 +3017,18 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
         .clipped()
     }
 
+    private var mediaDisplayTitle: String {
+        let title = nowPlaying.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.isEmpty || title == "Not playing" {
+            return String(localized: "Not playing", comment: "Media player title shown when nothing is playing.")
+        }
+        return nowPlaying.title
+    }
+
     private var mediaSongInfoCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Text(nowPlaying.title)
+                Text(mediaDisplayTitle)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
@@ -3049,7 +3096,7 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
         }
 
         if current == "No song playing" || current == "Not playing" {
-            return "No song playing"
+            return String(localized: "No song playing", comment: "Media lyrics message shown when nothing is playing.")
         }
 
         if current.hasPrefix("Lyrics are not exposed locally") {
