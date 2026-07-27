@@ -49,7 +49,9 @@ final class NowPlayingManager: ObservableObject {
     private var bridgeEmptyPayloadStreak = 0
     private var lastBridgePayload: MediaBridgePayload?
     private var playerSourceRows: [String: MediaSourceInfo] = [:]
+    private var browserSourceRows: [String: MediaSourceInfo] = [:]
     private var playerArtworkTitleCache: [String: String] = [:]
+    private var browserArtworkURLCache: [String: URL] = [:]
     private var progressTickCount = 0
     private let spotifyAccessibility = SpotifyAccessibility()
     private let lyricsClient = LRCLIBLyricsClient()
@@ -65,6 +67,7 @@ final class NowPlayingManager: ObservableObject {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.refreshPlayerSourceRows()
+            self?.refreshBrowserSourceRows()
         }
     }
 
@@ -94,6 +97,11 @@ final class NowPlayingManager: ObservableObject {
             if let state = readState(from: player) {
                 applyTrackState(state, sourceName: player.displayName, allowZeroReset: true)
                 loadArtworkFromPlayer(player)
+            }
+        } else if let normalized,
+                  let browser = BrowserPlayerApp.allCases.first(where: { $0.bundleIdentifier == normalized }) {
+            if let state = readBrowserState(from: browser) {
+                applyBrowserState(state, browser: browser, allowZeroReset: true)
             }
         } else if let payload = lastBridgePayload, mediaBridge.isHealthy {
             applyBridgePayloadToDisplay(payload)
@@ -224,6 +232,14 @@ final class NowPlayingManager: ObservableObject {
             sources.append(row)
         }
 
+        // Browsers only ever occupy the single bridge "system" slot, so a web
+        // player vanishes the moment MediaRemote hands focus to Spotify/Music.
+        // Hold each browser's own row so it stays listed under the main player.
+        let activeBundleID = displayFollowsBridge ? lastBridgePayload?.bundleID : nil
+        for (bundleID, row) in browserSourceRows where bundleID != activeBundleID {
+            sources.append(row)
+        }
+
         if sources != availableSources {
             availableSources = sources
         }
@@ -285,12 +301,67 @@ final class NowPlayingManager: ObservableObject {
         }
     }
 
+    // Poll every browser independently of the MediaRemote bridge so an actively
+    // playing web tab keeps its own source row even when it is not the system
+    // now-playing app.
+    private func refreshBrowserSourceRows() {
+        var didChange = false
+
+        for browser in BrowserPlayerApp.allCases {
+            let bundleID = browser.bundleIdentifier
+
+            guard browser.isRunning,
+                  let state = readBrowserState(from: browser),
+                  state.title.isEmpty == false else {
+                if browserSourceRows.removeValue(forKey: bundleID) != nil {
+                    browserArtworkURLCache.removeValue(forKey: bundleID)
+                    sourceArtworks.removeValue(forKey: bundleID)
+                    didChange = true
+                }
+                continue
+            }
+
+            let row = MediaSourceInfo(
+                id: bundleID,
+                displayName: browser.displayName,
+                title: state.title,
+                isPlaying: state.isPlaying
+            )
+            if browserSourceRows[bundleID] != row {
+                browserSourceRows[bundleID] = row
+                didChange = true
+            }
+
+            if let url = state.artworkURL, browserArtworkURLCache[bundleID] != url {
+                browserArtworkURLCache[bundleID] = url
+                URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+                    guard let data, let image = NSImage(data: data) else { return }
+                    DispatchQueue.main.async {
+                        self?.sourceArtworks[bundleID] = image
+                    }
+                }.resume()
+            }
+        }
+
+        if didChange {
+            rebuildAvailableSources()
+        }
+    }
+
     func togglePlayPause(sourceID: String) {
         if sourceID == "system" {
             if mediaBridge.isHealthy {
                 mediaBridge.sendCommand("toggle")
             } else {
                 postMediaKey(.playPause)
+            }
+            return
+        }
+
+        if let browser = BrowserPlayerApp.allCases.first(where: { $0.bundleIdentifier == sourceID }) {
+            _ = runAppleScriptString(browser.toggleScript)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.refreshBrowserSourceRows()
             }
             return
         }
@@ -1091,6 +1162,9 @@ final class NowPlayingManager: ObservableObject {
         }
         if progressTickCount % 10 == 0, PlayerApp.allCases.contains(where: \.isRunning) {
             refreshPlayerSourceRows()
+        }
+        if progressTickCount % 10 == 0, BrowserPlayerApp.allCases.contains(where: \.isRunning) {
+            refreshBrowserSourceRows()
         }
     }
 
@@ -1988,6 +2062,47 @@ private enum BrowserPlayerApp: CaseIterable {
         }
     }
 
+    var toggleScript: String {
+        let javaScript = """
+        (() => { const media = Array.from(document.querySelectorAll('video,audio')).find(m => m.readyState > 0 && !m.ended && m.duration > 0); if (!media) return false; if (media.paused) { media.play(); } else { media.pause(); } return true; })()
+        """
+
+        switch self {
+        case .safari:
+            return """
+            tell application "\(scriptName)"
+                if it is running then
+                    repeat with browserWindow in windows
+                        repeat with browserTab in tabs of browserWindow
+                            try
+                                set didToggle to do JavaScript \(Self.appleScriptString(javaScript)) in browserTab
+                                if didToggle is true then return true
+                            end try
+                        end repeat
+                    end repeat
+                end if
+            end tell
+            return false
+            """
+        default:
+            return """
+            tell application "\(scriptName)"
+                if it is running then
+                    repeat with browserWindow in windows
+                        repeat with browserTab in tabs of browserWindow
+                            try
+                                set didToggle to execute javascript \(Self.appleScriptString(javaScript)) in browserTab
+                                if didToggle is true then return true
+                            end try
+                        end repeat
+                    end repeat
+                end if
+            end tell
+            return false
+            """
+        }
+    }
+
     var shareURLScript: String {
         let javaScript = """
         (() => { const media = Array.from(document.querySelectorAll('video,audio')).find(m => !m.paused && !m.ended && m.readyState > 0); return media ? location.href : ''; })()
@@ -2030,7 +2145,7 @@ private enum BrowserPlayerApp: CaseIterable {
     }
 
     private static let playbackJavaScript = """
-    (() => { const media = Array.from(document.querySelectorAll('video,audio')).find(m => !m.paused && !m.ended && m.readyState > 0); if (!media) return ''; const metadata = navigator.mediaSession && navigator.mediaSession.metadata; const clean = value => String(value || '').replaceAll('|', ' ').replace(/[\\r\\n]+/g, ' ').trim(); const title = clean((metadata && metadata.title) || document.title); const artist = clean((metadata && metadata.artist) || location.hostname); const album = clean((metadata && metadata.album) || ''); const duration = Number.isFinite(media.duration) ? media.duration : 0; const position = Number.isFinite(media.currentTime) ? media.currentTime : 0; const artwork = metadata && metadata.artwork && metadata.artwork.length ? metadata.artwork[metadata.artwork.length - 1].src : ''; return [title, artist, album, duration, position, 'playing', artwork].join('|||'); })()
+    (() => { const all = Array.from(document.querySelectorAll('video,audio')).filter(m => m.readyState > 0 && !m.ended && m.duration > 0); const media = all.find(m => !m.paused) || all.find(m => m.currentTime > 0); if (!media) return ''; const metadata = navigator.mediaSession && navigator.mediaSession.metadata; const clean = value => String(value || '').replaceAll('|', ' ').replace(/[\\r\\n]+/g, ' ').trim(); const title = clean((metadata && metadata.title) || document.title); const artist = clean((metadata && metadata.artist) || location.hostname); const album = clean((metadata && metadata.album) || ''); const duration = Number.isFinite(media.duration) ? media.duration : 0; const position = Number.isFinite(media.currentTime) ? media.currentTime : 0; const state = media.paused ? 'paused' : 'playing'; const artwork = metadata && metadata.artwork && metadata.artwork.length ? metadata.artwork[metadata.artwork.length - 1].src : ''; return [title, artist, album, duration, position, state, artwork].join('|||'); })()
     """
 
     private static func appleScriptString(_ value: String) -> String {
