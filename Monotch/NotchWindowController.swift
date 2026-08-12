@@ -195,6 +195,7 @@ final class NotchWindowController {
         window.level = .popUpMenu
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         window.ignoresMouseEvents = false
+        window.acceptsMouseMovedEvents = true
         window.isMovableByWindowBackground = false
         window.hidesOnDeactivate = false
 

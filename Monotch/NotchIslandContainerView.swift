@@ -132,6 +132,7 @@ struct NotchIslandContainerView: View {
     @State private var mediaLyricsTrackKey = ""
     @State private var mediaLyricsRequestToken = 0
     @State private var hoveredSystemStat: SystemStatKind?
+    @State private var cameraControlHint: String?
     @State private var pendingFanModeSelection: SystemMonitorManager.FanMode?
     @State private var fanModeWarningMessage: String?
     @State private var fanModeWarningToken = 0
@@ -388,6 +389,7 @@ struct NotchIslandContainerView: View {
             prepareCameraPreviewWarmup()
         } else {
             resetCameraPreviewWarmup()
+            cameraControlHint = nil
             withAnimation(.easeInOut(duration: 0.18)) {
                 isCameraOpening = false
             }
@@ -507,6 +509,7 @@ struct NotchIslandContainerView: View {
     private func prepareCameraPreviewWarmup() {
         cameraPreviewWarmToken += 1
         isCameraPreviewWarm = true
+        camera.refreshAvailableCameraCount()
         updateCameraOpeningState()
     }
 
@@ -2484,6 +2487,9 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
         }
         .frame(height: cameraPreviewRowHeight)
         .frame(maxWidth: .infinity)
+        .overlay(alignment: .bottom) {
+            cameraControlHintOverlay
+        }
         .background(
             CameraSpaceShortcutView(manager: camera, aspectRatio: cameraCaptureAspectRatio)
                 .frame(width: 0, height: 0)
@@ -2561,7 +2567,8 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
                 systemName: "slider.horizontal.3",
                 isActive: cameraPortraitEnabled || cameraStudioLightEnabled || cameraEdgeLightEnabled,
                 tint: .green,
-                size: cameraUtilityButtonSize
+                size: cameraUtilityButtonSize,
+                help: String(localized: "Video effects — Portrait, Studio Light, Reactions", comment: "Tooltip for the camera video effects button.")
             ) {
                 showCameraVideoEffectsPanel()
             }
@@ -2570,7 +2577,11 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
                 systemName: "arrow.triangle.2.circlepath",
                 isActive: false,
                 tint: .white,
-                size: cameraUtilityButtonSize
+                size: cameraUtilityButtonSize,
+                help: canSwitchCamera
+                    ? String(localized: "Switch to the next camera", comment: "Tooltip for the switch camera button.")
+                    : String(localized: "No other camera connected", comment: "Tooltip for the switch camera button with only one camera available."),
+                isEnabled: canSwitchCamera
             ) {
                 camera.switchCamera()
             }
@@ -2581,6 +2592,10 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
                 }
             }
         }
+    }
+
+    private var canSwitchCamera: Bool {
+        camera.availableCameraCount > 1
     }
 
     private var cameraCaptureStack: some View {
@@ -2732,11 +2747,11 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
                                 NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
                             }
                     }
-
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .id(Self.cameraTrayBottomAnchor)
                 }
+                // The scroll target is the stack itself. A trailing spacer view would
+                // work too, but as a real stack child it also picks up the 7pt spacing,
+                // leaving a wider gap under the last thumbnail than beside it.
+                .id(Self.cameraTrayBottomAnchor)
                 .frame(minHeight: cameraPreviewRowHeight - 12, alignment: .bottom)
                 .padding(6)
             }
@@ -2910,9 +2925,11 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
         isActive: Bool,
         tint: Color = .white,
         size: CGFloat = 34,
+        help: String,
+        isEnabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
-        cameraControlButton(isActive: isActive, tint: tint, size: size, icon: {
+        cameraControlButton(isActive: isActive, tint: tint, size: size, help: help, isEnabled: isEnabled, icon: {
             Image(systemName: systemName)
                 .font(.system(size: max(10, size * 0.36), weight: .bold))
         }, action: action)
@@ -2923,6 +2940,9 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
             isActive: isCameraPreviewExpanded,
             tint: .white,
             size: cameraUtilityButtonSize,
+            help: isCameraPreviewExpanded
+                ? String(localized: "Shrink the preview back to a circle", comment: "Tooltip for the camera preview resize button while expanded.")
+                : String(localized: "Expand the preview to a wide view", comment: "Tooltip for the camera preview resize button while collapsed."),
             icon: {
                 Image(systemName: isCameraPreviewExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                     .font(.system(size: max(10, cameraUtilityButtonSize * 0.38), weight: .bold))
@@ -2970,6 +2990,8 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
         isActive: Bool,
         tint: Color,
         size: CGFloat,
+        help: String,
+        isEnabled: Bool = true,
         @ViewBuilder icon: @escaping () -> Icon,
         action: @escaping () -> Void
     ) -> some View {
@@ -2994,6 +3016,39 @@ private var visibleClipboardCards: [MonotchClipboardCard] {
                 )
         }
         .buttonStyle(.plain)
+        .disabled(isEnabled == false)
+        .opacity(isEnabled ? 1 : 0.38)
+        // `.help` covers accessibility, but AppKit will not draw its tooltip here: the
+        // notch is a non-activating panel owned by a background app, so the tooltip
+        // tracking never fires. The hover state below drives our own tooltip instead.
+        .help(help)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                if hovering {
+                    cameraControlHint = help
+                } else if cameraControlHint == help {
+                    cameraControlHint = nil
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var cameraControlHintOverlay: some View {
+        if let hint = cameraControlHint {
+            Text(hint)
+                .font(.system(size: 8.6, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.86))
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color.black.opacity(0.82)))
+                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                .shadow(color: .black.opacity(0.45), radius: 6, y: 2)
+                .transition(.opacity)
+                .allowsHitTesting(false)
+        }
     }
 
     private func mediaButton(systemName: String, size: CGFloat = 30, fontSize: CGFloat = 12, action: @escaping () -> Void) -> some View {
@@ -4069,6 +4124,14 @@ private extension View {
 private struct ShutterAnimationView: View {
     @State private var openAmount: CGFloat = 0.16
 
+    /// Blades fade over the last stretch of the sweep, so the iris finishes as a bare
+    /// ring instead of leaving blade tips parked against the rim.
+    private var bladeOpacity: Double {
+        let fadeStart: CGFloat = 0.78
+        let fadeEnd: CGFloat = 0.97
+        return Double(min(1, max(0, (fadeEnd - openAmount) / (fadeEnd - fadeStart))))
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let size = min(proxy.size.width, proxy.size.height)
@@ -4077,35 +4140,45 @@ private struct ShutterAnimationView: View {
                 Circle()
                     .fill(Color.black.opacity(0.22))
 
-                ForEach(0..<7, id: \.self) { index in
-                    ShutterBlade(openAmount: openAmount)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.34),
-                                    Color.white.opacity(0.12)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                ZStack {
+                    ForEach(0..<7, id: \.self) { index in
+                        ShutterBlade(openAmount: openAmount)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.34),
+                                        Color.white.opacity(0.12)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
                             )
-                        )
-                        .overlay(
-                            ShutterBlade(openAmount: openAmount)
-                                .stroke(Color.white.opacity(0.10), lineWidth: max(0.7, size * 0.006))
-                        )
-                        .rotationEffect(.degrees(Double(index) * 360.0 / 7.0))
-                        .shadow(color: .black.opacity(0.28), radius: 3, y: 1)
+                            .overlay(
+                                ShutterBlade(openAmount: openAmount)
+                                    .stroke(Color.white.opacity(0.10), lineWidth: max(0.7, size * 0.006))
+                            )
+                            .rotationEffect(.degrees(Double(index) * 360.0 / 7.0))
+                            .shadow(color: .black.opacity(0.28), radius: 3, y: 1)
+                    }
                 }
+                .frame(width: size, height: size)
+                // The blades sweep past the housing radius, so their corners would
+                // otherwise stick out around the rim once open. Clip them to the
+                // housing and fade them out as they arrive there.
+                .clipShape(Circle())
+                .opacity(bladeOpacity)
 
+                // Aperture edge, tracking the blades out to the rim.
                 Circle()
                     .stroke(Color.white.opacity(0.24), lineWidth: max(1.0, size * 0.016))
                     .frame(
-                        width: size * (0.22 + openAmount * 0.34),
-                        height: size * (0.22 + openAmount * 0.34)
+                        width: size * (0.22 + openAmount * 0.74),
+                        height: size * (0.22 + openAmount * 0.74)
                     )
 
+                // The closed-shutter core, gone by the time the iris is open.
                 Circle()
-                    .fill(Color.black.opacity(0.42))
+                    .fill(Color.black.opacity(0.42 * (1 - openAmount)))
                     .frame(
                         width: size * (0.14 + openAmount * 0.24),
                         height: size * (0.14 + openAmount * 0.24)
@@ -4116,9 +4189,11 @@ private struct ShutterAnimationView: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .onAppear {
-            openAmount = 0.16
-            withAnimation(.easeInOut(duration: 0.86).repeatForever(autoreverses: true)) {
-                openAmount = 0.82
+            // One iris sweep, then hold open. Warmup can take a couple of seconds and
+            // a shutter pulsing the whole time reads as a stall, not as progress.
+            openAmount = 0.14
+            withAnimation(.easeOut(duration: 0.9)) {
+                openAmount = 1
             }
         }
     }
@@ -4136,10 +4211,14 @@ private struct ShutterBlade: Shape {
         let size = min(rect.width, rect.height)
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let clampedOpen = min(1, max(0, openAmount))
-        let inner = size * (0.04 + clampedOpen * 0.22)
+        // Fully open, the blades retract to just shy of `outer` and thin out, leaving
+        // a narrow rim rather than the half-closed iris a smaller `inner` sweep gives.
+        let inner = size * (0.04 + clampedOpen * 0.46)
         let outer = size * 0.54
-        let halfBlade = size * (0.16 - clampedOpen * 0.025)
-        let skew = size * (0.13 + clampedOpen * 0.04)
+        // Tangential width has to grow as the blades move outward, or the seven of
+        // them stop overlapping and the rim breaks into separate spokes.
+        let halfBlade = size * (0.16 + clampedOpen * 0.14)
+        let skew = size * (0.13 - clampedOpen * 0.06)
 
         var path = Path()
         path.move(to: CGPoint(x: center.x + inner, y: center.y - halfBlade))

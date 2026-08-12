@@ -33,6 +33,9 @@ final class CameraCaptureManager: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published private(set) var isPreviewReady = false
     @Published private(set) var previewErrorMessage: String?
+    /// Drives whether switching cameras is offered at all — a Mac with only the
+    /// built-in camera has nothing to switch to.
+    @Published private(set) var availableCameraCount = 0
     @Published var captures: [CameraCaptureItem] = [] {
         didSet { saveCapturesIfNeeded() }
     }
@@ -69,6 +72,36 @@ final class CameraCaptureManager: NSObject, ObservableObject {
     private override init() {
         super.init()
         loadCaptures()
+
+        // Continuity Cameras and USB webcams come and go while the app runs, so the
+        // count cannot be read once at launch.
+        for name in [AVCaptureDevice.wasConnectedNotification, AVCaptureDevice.wasDisconnectedNotification] {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleCameraDevicesChanged),
+                name: name,
+                object: nil
+            )
+        }
+
+        refreshAvailableCameraCount()
+    }
+
+    @objc private func handleCameraDevicesChanged() {
+        refreshAvailableCameraCount()
+    }
+
+    func refreshAvailableCameraCount() {
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            let count = self.availableVideoDevices().count
+
+            DispatchQueue.main.async {
+                if self.availableCameraCount != count {
+                    self.availableCameraCount = count
+                }
+            }
+        }
     }
 
     func attachPreview(to layer: CALayer, frame: CGRect) {
