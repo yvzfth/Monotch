@@ -10,17 +10,29 @@ export const site = {
 };
 
 /**
+ * Reads an optional public env var.
+ *
+ * A var declared but left empty inlines as `""`, which is not nullish — so `??`
+ * lets it through and every "Get" button ends up with `href=""`, which looks
+ * live and does nothing when clicked. Empty and unset must mean the same thing.
+ */
+function configured(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+/**
  * Lemon Squeezy checkout URLs. Create the products in your store, then set these
- * in Vercel's environment variables. Anything left unset falls back to the
- * pricing page so the site never ships a dead button.
+ * in Vercel's environment variables. `null` until then, which the pricing cards
+ * render as a disabled button rather than a link that goes nowhere.
  */
 export const checkout = {
-  monthly: process.env.NEXT_PUBLIC_LS_CHECKOUT_MONTHLY ?? "/pricing",
-  yearly: process.env.NEXT_PUBLIC_LS_CHECKOUT_YEARLY ?? "/pricing",
-  lifetime: process.env.NEXT_PUBLIC_LS_CHECKOUT_LIFETIME ?? "/pricing",
+  monthly: configured(process.env.NEXT_PUBLIC_LS_CHECKOUT_MONTHLY),
+  yearly: configured(process.env.NEXT_PUBLIC_LS_CHECKOUT_YEARLY),
+  lifetime: configured(process.env.NEXT_PUBLIC_LS_CHECKOUT_LIFETIME),
 };
 
-export const downloadUrl = process.env.NEXT_PUBLIC_DOWNLOAD_URL ?? "/download";
+export const downloadUrl = configured(process.env.NEXT_PUBLIC_DOWNLOAD_URL);
 
 export type Plan = {
   id: keyof typeof checkout;

@@ -8,7 +8,7 @@ export default function Hero() {
     <section className="relative overflow-hidden border-b-2 border-ink/10">
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-32 left-1/2 h-96 w-184 -translate-x-1/2 rounded-full bg-lemon/35 blur-3xl"
+        className="hero-glow pointer-events-none absolute -top-32 left-1/2 h-96 w-184 -translate-x-1/2 rounded-full blur-2xl"
       />
 
       <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 py-20 lg:grid-cols-2 lg:py-28">

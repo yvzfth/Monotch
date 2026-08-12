@@ -3,7 +3,10 @@ import { checkout, plans } from "@/lib/site";
 export default function PricingCards() {
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      {plans.map((plan) => (
+      {plans.map((plan) => {
+        const checkoutUrl = checkout[plan.id];
+
+        return (
         <div
           key={plan.id}
           className={`sticker relative rounded-card bg-surface p-8 ${
@@ -51,16 +54,28 @@ export default function PricingCards() {
             ))}
           </ul>
 
-          <a
-            href={checkout[plan.id]}
-            className={`sticker sticker-press mt-8 block rounded-full px-6 py-3 text-center font-semibold ${
-              plan.featured ? "bg-lemon text-on-accent" : "bg-paper-deep"
-            }`}
-          >
-            Get {plan.name}
-          </a>
+          {checkoutUrl ? (
+            <a
+              href={checkoutUrl}
+              className={`sticker sticker-press mt-8 block rounded-full px-6 py-3 text-center font-semibold ${
+                plan.featured ? "bg-lemon text-on-accent" : "bg-paper-deep"
+              }`}
+            >
+              Get {plan.name}
+            </a>
+          ) : (
+            // No checkout configured yet. A disabled control is honest; an anchor
+            // with an empty href just looks broken.
+            <span
+              className="mt-8 block cursor-not-allowed rounded-full border-2 border-dashed border-ink/25 px-6 py-3 text-center font-semibold text-ink-soft"
+              title="Checkout is not configured yet"
+            >
+              Coming soon
+            </span>
+          )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

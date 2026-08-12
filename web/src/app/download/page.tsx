@@ -23,7 +23,7 @@ const steps = [
 ];
 
 export default function DownloadPage() {
-  const hasBuild = downloadUrl !== "/download";
+  const build = downloadUrl;
 
   return (
     <>
@@ -37,9 +37,9 @@ export default function DownloadPage() {
             rest.
           </p>
 
-          {hasBuild ? (
+          {build ? (
             <a
-              href={downloadUrl}
+              href={build}
               className="sticker sticker-press mt-9 inline-block rounded-full bg-lemon px-8 py-4 text-lg font-semibold text-on-accent"
             >
               Download .dmg

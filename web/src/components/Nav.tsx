@@ -36,10 +36,13 @@ export default function Nav() {
             "max-sm:h-16 max-sm:w-[min(94vw,26rem)]",
           ].join(" ")}
         >
-          {/* Resting state: just the mark and the wordmark, like the collapsed nub. */}
+          {/* Resting state: just the mark and the wordmark, like the collapsed nub.
+              Decorative, and `pointer-events-none` because a faded-out element
+              still swallows clicks — without it this layer sits over the links
+              once the island opens and shows a text cursor instead. */}
           <div
             aria-hidden
-            className="absolute flex items-center gap-2 transition-opacity duration-200 group-hover:opacity-0 group-focus-within:opacity-0 max-sm:hidden"
+            className="pointer-events-none absolute flex items-center gap-2 transition-opacity duration-200 group-hover:opacity-0 group-focus-within:opacity-0 max-sm:hidden"
           >
             <Image
               src="/logo.png"
@@ -60,7 +63,10 @@ export default function Nav() {
             className={[
               "flex w-full items-center gap-3 px-5 opacity-0 transition-opacity duration-200",
               "sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
-              "max-sm:opacity-100",
+              // Invisible while collapsed, so it must not take clicks either —
+              // otherwise the nub hides live links behind it.
+              "pointer-events-none sm:group-hover:pointer-events-auto sm:group-focus-within:pointer-events-auto",
+              "max-sm:pointer-events-auto max-sm:opacity-100",
             ].join(" ")}
           >
             <Link href="/" className="flex shrink-0 items-center gap-2">

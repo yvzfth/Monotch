@@ -27,6 +27,12 @@
   --radius-card: 1.75rem;
 }
 
+:root {
+  /* Strength of the hero glow. Lower in dark mode below — full-strength lemon
+     on near-black reads as a flat, hard-edged disc instead of a glow. */
+  --hero-glow-alpha: 45%;
+}
+
 /* Dark theme. Only the neutrals are redefined; every utility built from these
    tokens follows automatically, including the sticker borders and shadows,
    which invert from black-on-paper to cream-on-charcoal. */
@@ -38,6 +44,7 @@
       --color-surface: #24211d;
       --color-ink: #f7f2e7;
       --color-ink-soft: #a8a29e;
+      --hero-glow-alpha: 20%;
     }
   }
 
@@ -47,6 +54,7 @@
     --color-surface: #24211d;
     --color-ink: #f7f2e7;
     --color-ink-soft: #a8a29e;
+    --hero-glow-alpha: 20%;
   }
 
   html {
@@ -121,6 +129,17 @@
   .reveal-in {
     opacity: 1;
     transform: none;
+  }
+
+  /* Hero backdrop glow. A radial fade reads as light, not a sticker circle —
+     the flat blurred disc this replaces looked fine on cream but turned into
+     a hard, neon-ish blob once the page went dark. */
+  .hero-glow {
+    background: radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--color-lemon) var(--hero-glow-alpha), transparent) 0%,
+      transparent 100%
+    );
   }
 }
 

@@ -16,7 +16,7 @@ export default function FAQ() {
           <details
             className="sticker group rounded-card bg-surface p-6 open:bg-paper-deep"
           >
-            <summary className="flex cursor-pointer list-none items-center gap-4 font-semibold">
+            <summary className="flex cursor-pointer list-none items-center gap-4 font-semibold select-none">
               {faq.q}
               <svg
                 aria-hidden
