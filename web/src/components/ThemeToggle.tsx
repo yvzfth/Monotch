@@ -48,7 +48,9 @@ export default function ThemeToggle() {
     <button
       type="button"
       onClick={() => choose(isDark ? "light" : "dark")}
-      className="sticker-sm sticker-press grid h-9 w-9 place-items-center rounded-xl bg-surface"
+      // Lives inside the black island, so it is styled for that surface rather
+      // than following the page theme.
+      className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
       aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
       // Before hydration the button cannot know the stored choice, so the icon
       // is hidden rather than rendered wrong and swapped a frame later.

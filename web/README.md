@@ -48,11 +48,32 @@ store and the build exist.
 
 | What | Where |
 | --- | --- |
-| Copy, plans, prices, features, FAQ | `src/lib/site.ts` |
-| Colours, fonts, sticker shadows | `src/app/globals.css` |
+| Copy, plans, prices, features, FAQ, tab write-ups | `src/lib/site.ts` |
+| Colours, fonts, dark theme, sticker shadows | `src/app/globals.css` |
 | Hero illustration | `src/components/NotchMock.tsx` |
-| Screenshots | drop files in `public/screenshots/` |
+| The notch-shaped navigation | `src/components/Nav.tsx` |
+| Screenshots | drop files in `public/screenshots/tabs/` |
 | Pages | `src/app/**/page.tsx` |
+
+## The navigation
+
+The nav is a black island fixed to the top of the page that expands on hover —
+a live demo of what the app does under a real notch. Expansion is pure CSS
+(`group-hover` plus `group-focus-within`), so it opens for keyboard users too
+and stays a server component. Hover does not exist on touch, so below the `sm`
+breakpoint the island renders permanently open with the text links dropped.
+
+## Dark theme
+
+Three states: light, dark, or follow the OS. Only the neutral tokens in
+`globals.css` flip — accents stay put, and because the sticker borders and
+shadows are drawn with `--color-ink`, the whole treatment inverts for free.
+
+Two rules worth keeping in mind when adding components:
+
+- Use `bg-surface`, never `bg-white`, for anything that should follow the theme.
+- Put `text-on-accent` on text sitting over an accent fill. `--color-ink` turns
+  cream in dark mode, which is unreadable on lemon.
 
 ## Logo and screenshots
 
@@ -66,9 +87,10 @@ The logo is the app icon, copied from
 
 If you redraw the icon in Xcode, re-copy those three files.
 
-Screenshots go in `public/screenshots/` and are listed at build time — see the
-README in that folder for naming and capture tips. Until you add one, the
-homepage gallery shows dashed placeholders instead of broken images.
+Screenshots go in `public/screenshots/tabs/`, one per tab, named `media.png`,
+`clipboard.png`, `system.png` and `camera.png`. They are resolved at build time —
+see the README in that folder for capture tips. Any tab without a file renders a
+dashed placeholder instead of a broken image.
 
 Prices in `src/lib/site.ts` are placeholders. They are display-only — the real
 amount charged is whatever the Lemon Squeezy product says, so change both.

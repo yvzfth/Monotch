@@ -2,7 +2,6 @@ import Link from "next/link";
 import Hero from "@/components/Hero";
 import Features from "@/components/Features";
 import TabShowcase from "@/components/TabShowcase";
-import Screenshots from "@/components/Screenshots";
 import PricingCards from "@/components/PricingCards";
 import FAQ from "@/components/FAQ";
 import Reveal from "@/components/Reveal";
@@ -13,7 +12,6 @@ export default function Home() {
       <Hero />
       <Features />
       <TabShowcase />
-      <Screenshots />
 
       <section className="border-y-2 border-ink/10 bg-paper-deep">
         <div className="mx-auto max-w-6xl px-5 py-24">
