@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 struct ScrollCaptureView: NSViewRepresentable {
-    var onScroll: (CGFloat, CGFloat, CGPoint) -> Void
+    var onScroll: (CGFloat, CGFloat, CGPoint, NSEvent.Phase, NSEvent.Phase) -> Void
 
     func makeNSView(context: Context) -> ScrollCaptureNSView {
         let view = ScrollCaptureNSView()
@@ -16,12 +16,12 @@ struct ScrollCaptureView: NSViewRepresentable {
 }
 
 final class ScrollCaptureNSView: NSView {
-    var onScroll: ((CGFloat, CGFloat, CGPoint) -> Void)?
+    var onScroll: ((CGFloat, CGFloat, CGPoint, NSEvent.Phase, NSEvent.Phase) -> Void)?
     private var scrollMonitor: Any?
 
     override func scrollWheel(with event: NSEvent) {
         super.scrollWheel(with: event)
-        onScroll?(event.scrollingDeltaX, event.scrollingDeltaY, convert(event.locationInWindow, from: nil))
+        onScroll?(event.scrollingDeltaX, event.scrollingDeltaY, convert(event.locationInWindow, from: nil), event.phase, event.momentumPhase)
     }
 
     override func viewDidMoveToWindow() {
@@ -57,7 +57,9 @@ final class ScrollCaptureNSView: NSView {
             self.onScroll?(
                 event.scrollingDeltaX,
                 event.scrollingDeltaY,
-                self.convert(event.locationInWindow, from: nil)
+                self.convert(event.locationInWindow, from: nil),
+                event.phase,
+                event.momentumPhase
             )
             return event
         }

@@ -120,6 +120,9 @@ struct NotchIslandContainerView: View {
     @State private var tabScrollGestureConsumed = false
     @State private var tabScrollGestureToken = 0
     @State private var lastTabSwitchDate = Date.distantPast
+    private static let minTabHoldInterval: TimeInterval = 0.3
+    private static let tabScrollThreshold: CGFloat = 18
+    private static let maxTabScrollStep: CGFloat = 8
     @State private var tabTransitionDirection = 1
     @State private var isKeyboardTabSwitchLocked = false
     @State private var mediaScrollAccumulatedDelta: CGFloat = 0
@@ -257,8 +260,8 @@ struct NotchIslandContainerView: View {
             }
         }
         .overlay(
-            ScrollCaptureView { deltaX, deltaY, location in
-                handleScroll(deltaX: deltaX, deltaY: deltaY, location: location)
+            ScrollCaptureView { deltaX, deltaY, location, phase, momentumPhase in
+                handleScroll(deltaX: deltaX, deltaY: deltaY, location: location, phase: phase, momentumPhase: momentumPhase)
             }
             .allowsHitTesting(false)
         )
@@ -948,9 +951,15 @@ struct NotchIslandContainerView: View {
         .joined(separator: "|")
     }
 
-    private func handleScroll(deltaX: CGFloat, deltaY: CGFloat, location: CGPoint) {
+    private func handleScroll(deltaX: CGFloat, deltaY: CGFloat, location: CGPoint, phase: NSEvent.Phase, momentumPhase: NSEvent.Phase) {
         guard ui.isExpanded else { return }
         guard !activePages.isEmpty else { return }
+
+        // Gesture boundaries arrive as zero-delta events, so they have to be recorded
+        // before the axis test below — which would otherwise discard them all.
+        if updateTabScrollPhase(phase: phase, momentumPhase: momentumPhase) {
+            return
+        }
 
         if abs(deltaX) > abs(deltaY) * 1.12 {
             if shouldReserveHorizontalScroll(at: location) {
@@ -958,7 +967,7 @@ struct NotchIslandContainerView: View {
                 return
             }
 
-            if handleTabScroll(deltaX: deltaX) {
+            if handleTabScroll(deltaX: deltaX, phase: phase, momentumPhase: momentumPhase) {
                 return
             }
         }
@@ -987,32 +996,78 @@ struct NotchIslandContainerView: View {
         }
     }
 
-    private func handleTabScroll(deltaX: CGFloat) -> Bool {
+    /// Records trackpad gesture boundaries. Returns `true` when the event is a pure
+    /// boundary marker carrying no scrolling to act on.
+    ///
+    /// A mid-swipe finger reposition reports `.ended` plus a fresh `.began` that is
+    /// indistinguishable from a deliberate second swipe, so a `.began` arriving inside
+    /// `minTabHoldInterval` of the last switch is treated as a continuation of the
+    /// swipe already spent rather than a new one.
+    private func updateTabScrollPhase(phase: NSEvent.Phase, momentumPhase: NSEvent.Phase) -> Bool {
+        guard momentumPhase == [] else { return false }
+
+        if phase.contains(.began) || phase.contains(.mayBegin) {
+            if Date().timeIntervalSince(lastTabSwitchDate) >= Self.minTabHoldInterval {
+                tabScrollAccumulatedDelta = 0
+                tabScrollGestureConsumed = false
+            }
+            return true
+        }
+
+        if phase.contains(.ended) || phase.contains(.cancelled) {
+            tabScrollAccumulatedDelta = 0
+            return true
+        }
+
+        return false
+    }
+
+    /// One physical swipe moves exactly one tab, no matter how hard it is thrown.
+    ///
+    /// - Inertia (`momentumPhase`) is dropped outright. A hard flick keeps emitting
+    ///   large deltas long after the fingers lift; feeding those to the accumulator is
+    ///   what made one flick fly through two or three tabs.
+    /// - Within a single finger-down gesture only the first threshold crossing counts
+    ///   (`tabScrollGestureConsumed`), so a long continuous drag still advances once.
+    private func handleTabScroll(deltaX: CGFloat, phase: NSEvent.Phase, momentumPhase: NSEvent.Phase) -> Bool {
+        // Inertial tail of a flick — the fingers are already off the trackpad, so the
+        // gesture has had its one switch. Swallow it without touching any state.
+        guard momentumPhase == [] else { return true }
+
         guard abs(deltaX) > 0.15 else { return true }
 
+        let hasPhaseInfo = phase != []
         tabScrollGestureToken += 1
         let token = tabScrollGestureToken
-        tabScrollAccumulatedDelta += deltaX
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            guard tabScrollGestureToken == token else { return }
-            tabScrollAccumulatedDelta = 0
-            tabScrollGestureConsumed = false
+        // A flick can deliver one huge delta in a single event; clamping keeps that
+        // from counting as several tabs' worth of travel in one go.
+        tabScrollAccumulatedDelta += max(-Self.maxTabScrollStep, min(Self.maxTabScrollStep, deltaX))
+
+        if hasPhaseInfo == false {
+            // Plain scroll wheels carry no phase data, so there is no gesture boundary
+            // to key off — fall back to an idle-timeout to end the "gesture".
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                guard tabScrollGestureToken == token else { return }
+                tabScrollAccumulatedDelta = 0
+                tabScrollGestureConsumed = false
+            }
         }
 
         guard tabScrollGestureConsumed == false,
-              abs(tabScrollAccumulatedDelta) >= 18 else {
+              abs(tabScrollAccumulatedDelta) >= Self.tabScrollThreshold else {
             return true
         }
 
-        // Even while scrolling continuously, hold each tab for at least 0.3 s.
-        guard Date().timeIntervalSince(lastTabSwitchDate) >= 0.3 else {
+        // Even while scrolling continuously, hold each tab for at least this long.
+        guard Date().timeIntervalSince(lastTabSwitchDate) >= Self.minTabHoldInterval else {
             return true
         }
 
-        tabScrollGestureConsumed = true
-        lastTabSwitchDate = Date()
         let direction = tabScrollAccumulatedDelta > 0 ? -1 : 1
+        tabScrollGestureConsumed = true
+        tabScrollAccumulatedDelta = 0
+        lastTabSwitchDate = Date()
         switchToPageIndex(currentPageIndex + direction, direction: direction)
         return true
     }
@@ -1649,7 +1704,7 @@ private var fanSensorsCard: some View {
         }
 
         HStack(spacing: 6) {
-            ForEach(SystemMonitorManager.TemperatureReading.Kind.allCases, id: \.self) { kind in
+            ForEach(availableTemperatureKinds, id: \.self) { kind in
                 fanTemperatureTile(kind, reading: temperatureReading(for: kind))
             }
         }
@@ -1948,6 +2003,15 @@ private var fanSensorsCard: some View {
 
     private func temperatureReading(for kind: SystemMonitorManager.TemperatureReading.Kind) -> SystemMonitorManager.TemperatureReading? {
         system.temperatureReadings.first { $0.kind == kind }
+    }
+
+    /// Only sensor kinds actually reporting on this model. Absent kinds (e.g. Memory
+    /// Bank on models without that SMC key) are dropped entirely instead of showing
+    /// a dead "--" tile.
+    private var availableTemperatureKinds: [SystemMonitorManager.TemperatureReading.Kind] {
+        SystemMonitorManager.TemperatureReading.Kind.allCases.filter { kind in
+            system.temperatureReadings.contains { $0.kind == kind }
+        }
     }
 
     private var hottestTemperatureReading: SystemMonitorManager.TemperatureReading? {
