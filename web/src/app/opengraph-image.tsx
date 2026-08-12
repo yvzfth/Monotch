@@ -1,18 +1,19 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { ImageResponse } from "next/og";
+import { logoDataUri } from "./og-logo";
 import { site } from "@/lib/site";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export const alt = `${site.name} — ${site.tagline}`;
 
-// Generated at build time from the real app icon, so the social card and the
-// app can never drift apart.
-export default async function OpengraphImage() {
-  const logo = await readFile(path.join(process.cwd(), "public", "logo.png"));
-  const logoSrc = `data:image/png;base64,${logo.toString("base64")}`;
-
+/**
+ * Social card, built from the real app icon.
+ *
+ * The icon arrives as a data URI from ./og-logo.ts rather than being read at
+ * render time. Metadata routes are bundled without Node builtins, so `node:fs`
+ * fails the build outright, and `fetch` of a file: URL is unimplemented.
+ */
+export default function OpengraphImage() {
   return new ImageResponse(
     (
       <div
@@ -27,8 +28,9 @@ export default async function OpengraphImage() {
           backgroundColor: "#fffaf0",
         }}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={logoSrc}
+          src={logoDataUri}
           width={132}
           height={132}
           style={{

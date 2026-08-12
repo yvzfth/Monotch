@@ -85,7 +85,20 @@ The logo is the app icon, copied from
 - `src/app/opengraph-image.tsx` — social card, generated at build time from the
   same logo so the two can never drift apart
 
-If you redraw the icon in Xcode, re-copy those three files.
+If you redraw the icon in Xcode, re-copy those three files and regenerate the
+social card's copy of it. Metadata routes are bundled without Node builtins, so
+the card cannot read the PNG at render time — `node:fs` fails the build and
+`fetch` of a `file:` URL is unimplemented. The icon is inlined as a data URI
+instead:
+
+```bash
+# from the repo root
+node -e '
+const fs=require("fs");
+const b64=fs.readFileSync("Monotch/Assets.xcassets/AppIcon.appiconset/icon_256x256.png").toString("base64");
+fs.writeFileSync("web/src/app/og-logo.ts",`export const logoDataUri =\n  "data:image/png;base64,${b64}";\n`);
+'
+```
 
 Screenshots go in `public/screenshots/tabs/`, one per tab, named `media.png`,
 `clipboard.png`, `system.png` and `camera.png`. They are resolved at build time —
