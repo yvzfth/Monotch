@@ -32,22 +32,6 @@ final class SystemMonitorManager: ObservableObject {
         var id: Kind { kind }
     }
 
-    struct StorageCategory: Identifiable, Equatable {
-        enum Kind: String, CaseIterable {
-            case photos
-            case applications
-            case documents
-            case developer
-            case mail
-            case systemData
-        }
-
-        let kind: Kind
-        let bytes: UInt64
-
-        var id: Kind { kind }
-    }
-
     enum FanMode: String {
         case automatic = "Auto"
         case silent = "Silent"
@@ -82,7 +66,6 @@ final class SystemMonitorManager: ObservableObject {
     @Published private(set) var diskUsed: UInt64 = 0
     @Published private(set) var diskFree: UInt64 = 0
     @Published private(set) var diskTotal: UInt64 = 0
-    @Published private(set) var diskCategories: [StorageCategory] = []
     @Published private(set) var fanAvailable = false
     @Published private(set) var fanControlAvailable = false
     @Published private(set) var fanMode: FanMode = .automatic
@@ -101,11 +84,8 @@ final class SystemMonitorManager: ObservableObject {
     private let smc = AppleSMCController()
     private let coreTelemetryQueue = DispatchQueue(label: "fatihyavuz.Monotch.core-telemetry", qos: .utility)
     private let fanTelemetryQueue = DispatchQueue(label: "fatihyavuz.Monotch.fan-telemetry", qos: .utility)
-    private let storageScanQueue = DispatchQueue(label: "fatihyavuz.Monotch.storage-scan", qos: .utility)
-    private var lastStorageCategoryScan = Date.distantPast
     private var isReadingCoreTelemetry = false
     private var isReadingFanTelemetry = false
-    private var isScanningStorageCategories = false
     private var isMonitoringActive = false
     private var lastProcessCountScan = Date.distantPast
     private var pendingFanMode: FanMode?
@@ -265,10 +245,6 @@ final class SystemMonitorManager: ObservableObject {
                 self.diskTotal = disk.total
                 self.diskFree = disk.free
                 self.diskUsed = disk.used
-
-                if disk.total == 0 {
-                    self.diskCategories = []
-                }
 
                 self.isReadingCoreTelemetry = false
             }
@@ -444,216 +420,6 @@ final class SystemMonitorManager: ObservableObject {
         }
 
         return UInt64(swap.xsu_used)
-    }
-
-    func refreshStorageCategoriesIfNeeded() {
-        let now = Date()
-        guard diskTotal > 0 else {
-            diskCategories = []
-            return
-        }
-        guard isScanningStorageCategories == false else { return }
-        guard now.timeIntervalSince(lastStorageCategoryScan) > 300 || diskCategories.isEmpty else { return }
-
-        isScanningStorageCategories = true
-        lastStorageCategoryScan = now
-
-        let diskUsedSnapshot = diskUsed
-        storageScanQueue.async { [weak self] in
-            let categories = autoreleasepool {
-                Self.scanStorageCategories(diskUsed: diskUsedSnapshot)
-            }
-
-            DispatchQueue.main.async {
-                self?.diskCategories = categories
-                self?.isScanningStorageCategories = false
-            }
-        }
-    }
-
-    private static func scanStorageCategories(diskUsed: UInt64) -> [StorageCategory] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let developerPathPrefixes = [
-            home.appendingPathComponent("Developer").standardizedFileURL.path,
-            home.appendingPathComponent("Documents/Codes").standardizedFileURL.path,
-            home.appendingPathComponent(".gradle").standardizedFileURL.path,
-            home.appendingPathComponent(".npm").standardizedFileURL.path,
-            home.appendingPathComponent(".pub-cache").standardizedFileURL.path,
-            home.appendingPathComponent(".cargo").standardizedFileURL.path,
-            home.appendingPathComponent(".rustup").standardizedFileURL.path,
-            home.appendingPathComponent(".swiftpm").standardizedFileURL.path
-        ]
-        let photoLibraryURLs = [
-            home.appendingPathComponent("Pictures")
-        ]
-        let mediaSearchURLs = [
-            home.appendingPathComponent("Desktop"),
-            home.appendingPathComponent("Documents"),
-            home.appendingPathComponent("Downloads"),
-            home.appendingPathComponent("Movies"),
-            home.appendingPathComponent("Music")
-        ]
-        let pathsByKind: [(StorageCategory.Kind, [URL])] = [
-            (.developer, [
-                URL(fileURLWithPath: "/Library/Developer"),
-                home.appendingPathComponent("Developer"),
-                home.appendingPathComponent("Documents/Codes"),
-                home.appendingPathComponent(".gradle"),
-                home.appendingPathComponent(".npm"),
-                home.appendingPathComponent(".pub-cache"),
-                home.appendingPathComponent(".cargo"),
-                home.appendingPathComponent(".rustup"),
-                home.appendingPathComponent(".swiftpm")
-            ]),
-            (.applications, [
-                URL(fileURLWithPath: "/Applications"),
-                URL(fileURLWithPath: "/System/Applications"),
-                home.appendingPathComponent("Applications")
-            ]),
-            (.documents, [
-                home.appendingPathComponent("Documents"),
-                home.appendingPathComponent("Desktop"),
-                home.appendingPathComponent("Downloads"),
-                home.appendingPathComponent("Movies"),
-                home.appendingPathComponent("Music")
-            ])
-        ]
-
-        var seenPaths = Set<String>()
-        var categories: [StorageCategory] = []
-        var categorizedBytes: UInt64 = 0
-
-        let photosBytes = photoLibraryURLs.reduce(UInt64(0)) { total, url in
-            total + allocatedSize(of: url, seenPaths: &seenPaths)
-        } + mediaSearchURLs.reduce(UInt64(0)) { total, url in
-            total + mediaAllocatedSize(
-                of: url,
-                seenPaths: &seenPaths,
-                excludedPathPrefixes: developerPathPrefixes
-            )
-        }
-        categorizedBytes += photosBytes
-        categories.append(StorageCategory(kind: .photos, bytes: photosBytes))
-
-        for (kind, urls) in pathsByKind {
-            let bytes = urls.reduce(UInt64(0)) { total, url in
-                total + allocatedSize(of: url, seenPaths: &seenPaths)
-            }
-
-            categorizedBytes += bytes
-            categories.append(StorageCategory(kind: kind, bytes: bytes))
-        }
-
-        if categorizedBytes > diskUsed, categorizedBytes > 0 {
-            categories = categories.map { category in
-                StorageCategory(
-                    kind: category.kind,
-                    bytes: UInt64((Double(category.bytes) / Double(categorizedBytes)) * Double(diskUsed))
-                )
-            }
-            categorizedBytes = categories.reduce(UInt64(0)) { $0 + $1.bytes }
-        }
-
-        let systemDataBytes = diskUsed > categorizedBytes ? diskUsed - categorizedBytes : 0
-        categories.append(StorageCategory(kind: .systemData, bytes: systemDataBytes))
-
-        return categories
-    }
-
-    private static func mediaAllocatedSize(
-        of url: URL,
-        seenPaths: inout Set<String>,
-        excludedPathPrefixes: [String]
-    ) -> UInt64 {
-        let rootPath = url.standardizedFileURL.path
-        guard FileManager.default.fileExists(atPath: rootPath) else { return 0 }
-        guard isPath(rootPath, insideAnyOf: excludedPathPrefixes) == false else { return 0 }
-
-        let mediaExtensions: Set<String> = [
-            "jpg", "jpeg", "png", "gif", "heic", "heif", "tif", "tiff", "raw", "dng",
-            "webp", "bmp", "psd", "ai", "svg", "mov", "mp4", "m4v", "avi", "mkv", "hevc"
-        ]
-        let keys: [URLResourceKey] = [
-            .isRegularFileKey,
-            .isDirectoryKey,
-            .totalFileAllocatedSizeKey,
-            .fileAllocatedSizeKey
-        ]
-
-        guard let enumerator = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: keys,
-            options: [],
-            errorHandler: { _, _ in true }
-        ) else {
-            return 0
-        }
-
-        var total: UInt64 = 0
-        for case let fileURL as URL in enumerator {
-            let path = fileURL.standardizedFileURL.path
-            if isPath(path, insideAnyOf: excludedPathPrefixes) {
-                enumerator.skipDescendants()
-                continue
-            }
-
-            guard mediaExtensions.contains(fileURL.pathExtension.lowercased()) else { continue }
-            guard seenPaths.insert(path).inserted else { continue }
-            guard let values = try? fileURL.resourceValues(forKeys: Set(keys)),
-                  values.isRegularFile == true else {
-                continue
-            }
-
-            total += UInt64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
-        }
-
-        return total
-    }
-
-    private static func allocatedSize(of url: URL, seenPaths: inout Set<String>) -> UInt64 {
-        let path = url.standardizedFileURL.path
-        guard seenPaths.insert(path).inserted else { return 0 }
-        guard FileManager.default.fileExists(atPath: path) else { return 0 }
-
-        let keys: [URLResourceKey] = [
-            .isRegularFileKey,
-            .isDirectoryKey,
-            .totalFileAllocatedSizeKey,
-            .fileAllocatedSizeKey
-        ]
-
-        if let values = try? url.resourceValues(forKeys: Set(keys)),
-           values.isRegularFile == true {
-            return UInt64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
-        }
-
-        guard let enumerator = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: keys,
-            options: [],
-            errorHandler: { _, _ in true }
-        ) else {
-            return 0
-        }
-
-        var total: UInt64 = 0
-        for case let fileURL as URL in enumerator {
-            guard seenPaths.insert(fileURL.standardizedFileURL.path).inserted else { continue }
-            guard let values = try? fileURL.resourceValues(forKeys: Set(keys)),
-                  values.isRegularFile == true else {
-                continue
-            }
-
-            total += UInt64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
-        }
-
-        return total
-    }
-
-    private static func isPath(_ path: String, insideAnyOf prefixes: [String]) -> Bool {
-        prefixes.contains { prefix in
-            path == prefix || path.hasPrefix(prefix + "/")
-        }
     }
 
     private func readFanTelemetry() {

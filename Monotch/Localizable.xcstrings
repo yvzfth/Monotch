@@ -1196,6 +1196,7 @@
     },
     "Apps" : {
       "comment" : "The Apps storage category.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -5045,6 +5046,7 @@
     },
     "Developer" : {
       "comment" : "The Developer storage category.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -5213,6 +5215,7 @@
     },
     "Documents" : {
       "comment" : "The Documents storage category.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -8667,6 +8670,7 @@
     },
     "Mail" : {
       "comment" : "The Mail storage category.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -11612,6 +11616,7 @@
     },
     "Photos" : {
       "comment" : "The Photos storage category.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -15907,6 +15912,7 @@
     },
     "System Data" : {
       "comment" : "The System Data storage category.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {

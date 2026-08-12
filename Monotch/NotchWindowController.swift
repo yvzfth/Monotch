@@ -2,7 +2,10 @@ import Cocoa
 import SwiftUI
 import Combine
 
-private final class NotchPanelWindow: NSWindow {
+// A non-activating panel rather than a plain window: clicking the island must not
+// activate Monotch, because activating it while another app owns a full-screen
+// space would throw the user out of that space back to the desktop.
+private final class NotchPanelWindow: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }
@@ -174,7 +177,7 @@ final class NotchWindowController {
 
         let window = NotchPanelWindow(
             contentRect: NSRect(x: originX, y: originY, width: notchWidth, height: notchHeight),
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -182,8 +185,15 @@ final class NotchWindowController {
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false
-        window.level = .statusBar
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // `.canJoinAllSpaces` + `.fullScreenAuxiliary` put the panel on full-screen
+        // spaces, but at `.statusBar` the island gets buried once a full-screen app
+        // hides the menu bar. `.popUpMenu` clears full-screen content while staying
+        // well below the screensaver/lock window, which `.screenSaver` would tie with
+        // and risk drawing over. `.stationary` keeps the window put instead of being
+        // dragged along by the space-switch animation, and `.ignoresCycle` keeps it
+        // out of Cmd-Tab window cycling.
+        window.level = .popUpMenu
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         window.ignoresMouseEvents = false
         window.isMovableByWindowBackground = false
         window.hidesOnDeactivate = false

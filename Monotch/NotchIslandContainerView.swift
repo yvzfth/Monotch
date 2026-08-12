@@ -309,9 +309,6 @@ struct NotchIslandContainerView: View {
         }
         .onChange(of: hoveredSystemStat) { _, _ in
             guard currentPage == .system else { return }
-            if hoveredSystemStat == .storage {
-                system.refreshStorageCategoriesIfNeeded()
-            }
             syncExpandedHeight()
         }
         .onChange(of: isCameraPreviewExpanded) { _, _ in
@@ -384,10 +381,6 @@ struct NotchIslandContainerView: View {
             sliderValue = nowPlaying.playerPosition
             refreshOutputVolumeLevel()
             reloadLyricsIfNeeded()
-        }
-
-        if activePage == .system, hoveredSystemStat == .storage {
-            system.refreshStorageCategoriesIfNeeded()
         }
 
         if activePage == .camera {
@@ -1539,21 +1532,6 @@ struct NotchIslandContainerView: View {
         systemDetailTag(title, color: color)
     }
 
-    private func storageCategoryLegend(_ category: SystemMonitorManager.StorageCategory) -> some View {
-        systemDetailTag("\(category.kind.storageTitle) \(byteText(category.bytes))", color: category.kind.storageColor)
-    }
-
-    private var visibleStorageCategories: [SystemMonitorManager.StorageCategory] {
-        let categories = system.diskCategories.filter { $0.bytes > 0 }
-        if categories.isEmpty {
-            return [
-                SystemMonitorManager.StorageCategory(kind: .systemData, bytes: system.diskUsed)
-            ]
-        }
-
-        return categories
-    }
-
     @ViewBuilder
     private func systemDetailPanel(for kind: SystemStatKind) -> some View {
         switch kind {
@@ -1564,10 +1542,11 @@ struct NotchIslandContainerView: View {
             memoryDetailPanel
 
         case .storage:
-            let storageCategories = visibleStorageCategories
-            let storageSegments = storageCategories.map { category in
-                (system.diskTotal > 0 ? Double(category.bytes) / Double(system.diskTotal) : 0, category.kind.storageColor)
-            } + [
+            // Used/free only. Breaking the used slice down by category meant walking
+            // Photos/Documents/Desktop/Downloads, which made macOS prompt for access
+            // to every protected folder just to render a legend.
+            let storageSegments = [
+                (system.diskTotal > 0 ? Double(system.diskUsed) / Double(system.diskTotal) : 0, Color.white.opacity(0.55)),
                 (system.diskTotal > 0 ? Double(system.diskFree) / Double(system.diskTotal) : 0, Color.white.opacity(0.22))
             ]
 
@@ -1576,13 +1555,10 @@ struct NotchIslandContainerView: View {
 
                 stackedSystemBar(storageSegments)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 7) {
-                        ForEach(storageCategories.prefix(5)) { category in
-                            storageCategoryLegend(category)
-                        }
-                        storageLegend(freePrefixText(byteText(system.diskFree)), Color.white.opacity(0.40))
-                    }
+                HStack(spacing: 7) {
+                    storageLegend(String(localized: "Used", comment: "Storage used metric label.") + " \(byteText(system.diskUsed))", Color.white.opacity(0.55))
+                    storageLegend(freePrefixText(byteText(system.diskFree)), Color.white.opacity(0.40))
+                    Spacer(minLength: 0)
                 }
                 .frame(height: 24)
 
@@ -4059,30 +4035,6 @@ private extension SystemMonitorManager.TemperatureReading.Kind {
         case .battery: return String(localized: "Battery", comment: "The battery temperature sensor.")
         case .memory: return String(localized: "Memory Bank", comment: "The memory bank temperature sensor.")
         case .wifi: return String(localized: "Wi-Fi", comment: "The Wi-Fi temperature sensor.")
-        }
-    }
-}
-
-private extension SystemMonitorManager.StorageCategory.Kind {
-    var storageTitle: String {
-        switch self {
-        case .photos: return String(localized: "Photos", comment: "The Photos storage category.")
-        case .applications: return String(localized: "Apps", comment: "The Apps storage category.")
-        case .documents: return String(localized: "Documents", comment: "The Documents storage category.")
-        case .developer: return String(localized: "Developer", comment: "The Developer storage category.")
-        case .mail: return String(localized: "Mail", comment: "The Mail storage category.")
-        case .systemData: return String(localized: "System Data", comment: "The System Data storage category.")
-        }
-    }
-
-    var storageColor: Color {
-        switch self {
-        case .photos: return Color(red: 1.00, green: 0.34, blue: 0.34)
-        case .applications: return Color(red: 1.00, green: 0.63, blue: 0.23)
-        case .documents: return Color(red: 1.00, green: 0.84, blue: 0.04)
-        case .developer: return Color(red: 0.25, green: 0.82, blue: 0.43)
-        case .mail: return Color(red: 0.05, green: 0.78, blue: 0.72)
-        case .systemData: return Color.white.opacity(0.55)
         }
     }
 }
